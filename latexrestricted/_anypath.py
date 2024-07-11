@@ -22,6 +22,8 @@ except ImportError:
 
 # The `type(...)` is needed to inherit the `_flavour` attribute
 class AnyPath(type(pathlib.Path())):
+    __slots__ = ('_cache_key')
+
     if sys.version_info[:2] < (3, 9):
         def is_relative_to(self, other: AnyPath) -> bool:
             try:
@@ -30,31 +32,44 @@ class AnyPath(type(pathlib.Path())):
                 return False
             return True
 
+        def with_stem(self, stem: str):
+            return self.with_name(stem + self.suffix)
 
-    # `super().resolve()` may be used frequently in determining whether paths
-    # are readable/writable/executable.  `.resolve()` and `.parent()` cache
-    # and track resolved paths to minimize file system access.
+
+    # `pathlib.Path.__hash__()` just depends on `self._str_normcase`.  For
+    # caching, the class must also be considered.
+    @property
+    def cache_key(self) -> tuple[type[Self], Self]:
+        try:
+            return self._cache_key
+        except AttributeError:
+            self._cache_key = (type(self), self)
+            return self._cache_key
+
+    # `ResolvedRestrictedPath` uses `super().resolve()` frequently to
+    # determine whether paths are readable/writable.  `.resolve()` and
+    # `.parent()` cache and track resolved paths to minimize file system
+    # access.
     _resolved_set: set[tuple[type[Self], Self]] = set()
     _resolve_cache: dict[tuple[type[Self], Self], Self] = {}
 
     def resolve(self) -> Self:
-        key = (type(self), self)
         try:
-            resolved = self._resolve_cache[key]
+            return self._resolve_cache[self.cache_key]
         except KeyError:
             resolved = super().resolve()
-            resolved_key = (key[0], resolved)
-            self._resolved_set.add(resolved_key)
-            self._resolve_cache[key] = resolved
-            self._resolve_cache[resolved_key] = resolved
-        return resolved
+            self._resolved_set.add(resolved.cache_key)
+            self._resolve_cache[self.cache_key] = resolved
+            self._resolve_cache[resolved.cache_key] = resolved
+            return resolved
+
+    def is_resolved(self) -> bool:
+        return self.cache_key in self._resolved_set
 
     @property
     def parent(self) -> Self:
         parent = super().parent
-        key = (type(self), self)
-        if key in self._resolved_set:
-            parent_key = (key[0], parent)
-            self._resolved_set.add(parent_key)
-            self._resolve_cache[parent_key] = parent
+        if self.cache_key in self._resolved_set:
+            self._resolved_set.add(parent.cache_key)
+            self._resolve_cache[parent.cache_key] = parent
         return parent
