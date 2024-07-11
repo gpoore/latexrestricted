@@ -10,251 +10,217 @@
 
 from __future__ import annotations
 
-import re
+import os
+from contextlib import AbstractContextManager
+from typing import Literal
 try:
     from typing import Self
 except ImportError:
     pass
-from ..err import PathSecurityError
+from .err import PathSecurityError
 from ._anypath import AnyPath
 from ._latex_config import latex_config
 
 
 
-_cwd_anypath = AnyPath(latex_config.tex_cwd)
-if latex_config.TEXMFOUTPUT:
-    _TEXMFOUTPUT_anypath_resolved = AnyPath(latex_config.TEXMFOUTPUT).resolve()
-else:
-    _TEXMFOUTPUT_anypath_resolved = None
-if latex_config.TEXMF_OUTPUT_DIRECTORY:
-    _TEXMF_OUTPUT_DIRECTORY_anypath_resolved = AnyPath(latex_config.TEXMF_OUTPUT_DIRECTORY).resolve()
-else:
-    _TEXMF_OUTPUT_DIRECTORY_anypath_resolved = None
+
+# Following the approach of `contextlib.chdir()` from Python 3.11+:
+# https://github.com/python/cpython/blob/3.12/Lib/contextlib.py#L788-L800
+class _CdTeXCwd(AbstractContextManager):
+    def __init__(self):
+        self._tex_cwd: str = latex_config.tex_cwd
+        self._cwd_stack: list[str | None] = []
+
+    def __enter__(self):
+        cwd = os.getcwd()
+        if cwd == self._tex_cwd:
+            self._cwd_stack.append(None)
+        else:
+            self._cwd_stack.append(cwd)
+            os.chdir(self._tex_cwd)
+
+    def __exit__(self, *excinfo):
+        last_cwd = self._cwd_stack.pop()
+        if last_cwd is not None:
+            os.chdir(last_cwd)
+
+_cd_tex_cwd = _CdTeXCwd()
 
 
-class RestrictedPath(type(AnyPath())):
+
+
+class BaseRestrictedPath(type(AnyPath())):
     '''
-    Subclass of `pathlib.Path` (which is system-dependent) that restricts file
-    operations to be consistent with TeX restricted shell escape security
-    requirements.  For this to be effective, all file operations must go
-    through this class; it must not be bypassed with other modules such as
-    `os` and `shutil` or functions such as `open()`.
+    Base class for `RestrictedPath` classes.  This is based on `AnyPath`,
+    instead of directly on `pathlib.Path`, for better Python 3.8 compatibility
+    and also for `.resolve()` caching.
 
-     *  Reading:  Restricted to `.read_text()`, `.read_bytes()`, and
-        `.open()`.  Permitted file locations and file names depend on variable
-        `openin_any` in `texmf.cnf` config files.
+    Redefines all methods that modify the file system.
 
-     *  Writing:  Restricted to `.write_text()` and `.open()`.  Restricted to
-        files under the current working directory, $TEXMFOUTPUT, and
-        $TEXMF_OUTPUT_DIRECTORY that have names matching the regular
-        expression for minted temp files or cache files.
+      * Most methods for opening, reading, writing, replacing, and deleting
+        files as well as methods for creating and deleting directories are
+        redefined to depend on the new methods `.tex_readable_dir()`,
+        `.tex_readable_file()`, `.tex_writable_dir()`, and
+        `.tex_writable_file()`.  These new methods all raise
+        `NotImplementedError` in the base class; they must be implemented by
+        subclasses.
 
-     *  Deleting files:  Restricted to `.unlink()`.  Restricted to files under
-        the current working directory, $TEXMFOUTPUT, and
-        $TEXMF_OUTPUT_DIRECTORY that have names matching the regular
-        expression for minted temp files or cache files.
+      * All other methods for modifying the file system are redefined to raise
+        `NotImplementedError`.  Most of these methods relate to file
+        permissions and links.
 
-     *  Creating directories:  Restricted to `.mkdir()`.  Restricted to
-        directories under the current working directory, $TEXMFOUTPUT, and
-        $TEXMF_OUTPUT_DIRECTORY.
-
-     *  Deleting directories:  Restricted to `.rmdir()`.  Restricted to
-        directories under the current working directory, $TEXMFOUTPUT, and
-        $TEXMF_OUTPUT_DIRECTORY.  `super().rmdir()` requires an empty
-        directory, so no additional checks are needed to ensure that only
-        permitted files are deleted.
-
-     *  Completely prohibited:
-         -  `.chmod()`
-         -  `.lchmod()`
-         -  `.write_bytes()` (use `.write_text()`)
-         -  `.rename()`
-         -  `.symlink_to()`
-         -  `.hardlink_to()`
-         -  `.touch()`
-
-    Differences from TeX's file system security (for example, see
-    https://www.tug.org/texinfohtml/kpathsea.html#Safe-filenames-1):
-
-     *  TeX's security settings for reading and writing files depend on
-        analyzing file paths as strings; the actual file system is never
-        consulted.  The default security setting for writing restricts
-        absolute paths to files within $TEXMF_OUTPUT_DIRECTORY and
-        $TEXMFOUTPUT.  Paths cannot contain `..` to access parent directories,
-        even if the location referred to is allowed.  As a result, relative
-        paths are restricted to paths under the current working directory
-        (plus $TEXMF_OUTPUT_DIRECTORY and $TEXMFOUTPUT, depending on document
-        and system configuration).  Symbolic links are not resolved, so they
-        can be used to access locations outside the current working directory,
-        $TEXMF_OUTPUT_DIRECTORY, and $TEXMFOUTPUT.
-
-        File system security is determined by `openout_any` and `openin_any`
-        settings in `texmf.cnf` for TeX Live, and from
-        `[Core]AllowUnsafeInputFiles` and `[Core]AllowUnsafeOutputFiles` in
-        `miktex.ini` for MiKTeX.
-
-     *  `RestrictedPath` security settings depend on resolving paths using the
-        file system.  Paths are converted into absolute paths with all
-        symlinks resolved, and only then are compared with permitted locations
-        for reading and writing.  Absolute paths and paths containing `..` are
-        always accepted for any permitted location.  Symbolic links are
-        resolved before determining whether a path is permitted, so they
-        cannot be used to access locations outside the current working
-        directory, $TEXMF_OUTPUT_DIRECTORY, and $TEXMFOUTPUT.
+    All supported methods that modify the file system operate with the TeX
+    working directory as the current working directory.  This is necessary for
+    performing path security analysis.  It is best not to modify the current
+    working directory.  However, it is possible to create paths when the
+    current working directory is another location and use those paths to
+    obtain information from the file system (for example, via `.exists()`).
+    Such paths will not work correctly to *modify* the file system; they must
+    first be converted into absolute paths or paths relative to the TeX
+    working directory.
     '''
 
-    _fs_read_dotfiles: bool = latex_config.can_read_dotfiles
-    _fs_read_roots: set[AnyPath] | None
-    if latex_config.can_read_anywhere:
-        _fs_read_roots = None
-    else:
-        _fs_read_roots = set()
-        _fs_read_roots.add(_cwd_anypath)
-        for p in (_TEXMFOUTPUT_anypath_resolved, _TEXMF_OUTPUT_DIRECTORY_anypath_resolved):
-            if p is not None:
-                _fs_read_roots.add(p)
+    __slots__ = ()
 
-    _fs_write_dotfiles: bool = latex_config.can_write_dotfiles
-    _fs_write_roots: set[AnyPath] | None
-    # Use the code below if this is separated out into a separate
-    # `latexrestricted` package with `RestrictedPath` as the base class for
-    # various kinds of restricted paths
-    # ------------------------------------------------------------------------
-    # if latex_config.can_write_anywhere:
-    #     _fs_write_roots = None
-    # else:
-    #     _fs_write_roots = set()
-    #     _fs_write_roots.add(_cwd_anypath)
-    #     for p in (_TEXMFOUTPUT_anypath_resolved, _TEXMF_OUTPUT_DIRECTORY_anypath_resolved):
-    #         if p is not None:
-    #             _fs_write_roots.add(p)
-    _fs_write_roots = set()
-    _fs_write_roots.add(_cwd_anypath)
-    for p in (_TEXMFOUTPUT_anypath_resolved, _TEXMF_OUTPUT_DIRECTORY_anypath_resolved):
-        if p is not None:
-            _fs_write_roots.add(p)
 
-    # Track readable/writable directories and files separately, since some of
-    # the requirements are different.
+    # Ensure paths are made relative to TeX working directory
 
-    _checked_readable_dir_set: set[RestrictedPath] = set()
-    _is_readable_dir_set: set[RestrictedPath] = set()
+    def absolute(self, *args, **kwargs):
+        with _cd_tex_cwd:
+            return super().absolute(*args, **kwargs)
 
-    _checked_readable_file_set: set[RestrictedPath] = set()
-    _is_readable_file_set: set[RestrictedPath] = set()
+    def resolve(self, *args, **kwargs):
+        with _cd_tex_cwd:
+            return super().resolve(*args, **kwargs)
 
-    _checked_writable_dir_set: set[RestrictedPath] = set()
-    _is_writable_dir_set: set[RestrictedPath] = set()
 
-    _checked_writable_file_set: set[RestrictedPath] = set()
-    _is_writable_file_set: set[RestrictedPath] = set()
+    # This must be defined by subclasses.  If false, the file system is
+    # accessed with a path as the path is currently defined.  If true, the
+    # path is resolved first.  This should be true for subclasses that perform
+    # path security analysis using resolved paths.  Otherwise, the file system
+    # could be modified after security analysis but before a path is used, so
+    # that the security analysis is invalid.
+    _access_file_system_with_resolved_paths: bool
 
-    # `[0-9a-zA-Z_-]+` covers temp file names `_<MD5 hash>` plus code cache
-    # file names `<MD5 hash>` plus style names `<style name>`.
-    _writable_filename_re = re.compile(r'[0-9a-zA-Z_-]+\.(?:config|data|errlog|highlight|index|message|style)\.minted')
+    # Default security is based on TeX configuration.  Subclasses can override
+    # this, but should typically only do so to increase security to maximum.
+    _tex_can_read_anywhere = latex_config.can_read_anywhere
+    _tex_can_read_dotfiles = latex_config.can_read_dotfiles
+    _tex_can_write_anywhere = latex_config.can_write_anywhere
+    _tex_can_write_dotfiles = latex_config.can_write_dotfiles
+    _tex_prohibited_write_file_extensions = latex_config.prohibited_write_file_extensions
 
-    def is_readable_dir(self) -> bool:
-        if self not in self._checked_readable_dir_set:
-            resolved = self.resolve()
-            if self._fs_read_roots is None or any(resolved.is_relative_to(p) for p in self._fs_read_roots):
-                self._is_readable_dir_set.add(self)
-            self._checked_readable_dir_set.add(self)
-        return self in self._is_readable_dir_set
+    # Caches use `self.cache_key` which includes the class, so that the
+    # returned type is correct.  Values describe whether paths are accessible,
+    # and if not, why:
+    #     (is_accessible: bool, reason_not_accessible: str | None)
+    _tex_readable_dir_cache:  dict[tuple[type[Self], Self], tuple[Literal[True], None] | tuple[Literal[False], str]] = {}
+    _tex_readable_file_cache: dict[tuple[type[Self], Self], tuple[Literal[True], None] | tuple[Literal[False], str]] = {}
+    _tex_writable_dir_cache:  dict[tuple[type[Self], Self], tuple[Literal[True], None] | tuple[Literal[False], str]] = {}
+    _tex_writable_file_cache: dict[tuple[type[Self], Self], tuple[Literal[True], None] | tuple[Literal[False], str]] = {}
 
-    def is_readable_file(self) -> bool:
-        if self not in self._checked_readable_file_set:
-            resolved = self.resolve()
-            if (resolved.parent.is_readable_dir() and (self._fs_read_dotfiles or not resolved.name.startswith('.'))):
-                self._is_readable_file_set.add(self)
-            self._checked_readable_file_set.add(self)
-        return self in self._is_readable_file_set
+    def tex_readable_dir(self) -> tuple[Literal[True], None] | tuple[Literal[False], str]:
+        raise NotImplementedError
 
-    def is_writable_dir(self) -> bool:
-        if self not in self._checked_writable_dir_set:
-            resolved = self.resolve()
-            if self._fs_write_roots is None or any(resolved.is_relative_to(p) for p in self._fs_write_roots):
-                self._is_writable_dir_set.add(self)
-            self._checked_writable_dir_set.add(self)
-        return self in self._is_writable_dir_set
+    def tex_readable_file(self) -> tuple[Literal[True], None] | tuple[Literal[False], str]:
+        raise NotImplementedError
 
-    def is_writable_file(self) -> bool:
-        if self not in self._checked_writable_file_set:
-            resolved = self.resolve()
-            if (resolved.parent.is_writable_dir() and
-                    (self._fs_write_dotfiles or not resolved.name.startswith('.')) and
-                    not any(resolved.name.endswith(ext) for ext in latex_config.prohibited_write_file_extensions) and
-                    self._writable_filename_re.fullmatch(resolved.name)):
-                self._is_writable_file_set.add(self)
-            self._checked_writable_file_set.add(self)
-        return self in self._is_writable_file_set
+    def tex_writable_dir(self) -> tuple[Literal[True], None] | tuple[Literal[False], str]:
+        raise NotImplementedError
+
+    def tex_writable_file(self) -> tuple[Literal[True], None] | tuple[Literal[False], str]:
+        raise NotImplementedError
 
 
     def chmod(self, *args, **kwargs):
+        raise NotImplementedError
+
+    def copy(self, *args, **kwargs):
+        # Python 3.14
+        raise NotImplementedError
+
+    def copytree(self, *args, **kwargs):
+        # Python 3.14
         raise NotImplementedError
 
     def lchmod(self, *args, **kwargs):
         raise NotImplementedError
 
     def mkdir(self, *args, **kwargs):
-        if not self.is_writable_dir():
-            raise PathSecurityError(
-                f'Cannot create directory because it is outside permitted locations:  "{self.as_posix()}"'
-            )
-        return super().mkdir(*args, **kwargs)
+        with _cd_tex_cwd:
+            is_writable, reason = self.tex_writable_dir()
+            if not is_writable:
+                raise PathSecurityError(f'Cannot create directory "{self.as_posix()}":  {reason}')
+            if self._access_file_system_with_resolved_paths and not self.is_resolved():
+                return super(BaseRestrictedPath, self.resolve()).mkdir(*args, **kwargs)
+            return super().mkdir(*args, **kwargs)
 
-    def open(self, mode: str, **kwargs):
-        # This check is redundant for the `.read_text()`, `.write_text()`,
-        # etc. cases which call `.open()` internally.  However, checks on all
-        # methods are needed for completeness, and also to guard against the
-        # possibility of future implementation changes in `pathlib`.
-        if mode in ('r', 'rb'):
-            if not self.is_readable_file():
-                raise PathSecurityError(
-                    f'Cannot read file because it is outside permitted locations:  "{self.as_posix()}"'
-                )
-        elif mode in ('w', 'wb'):
-            if not self.is_writable_file():
-                raise PathSecurityError(
-                    f'Cannot write file because it is outside permitted locations:  "{self.as_posix()}"'
-                )
-        else:
-            raise NotImplementedError
-        return super().open(mode=mode, **kwargs)
+    def open(self, mode: str = 'r', *args, **kwargs):
+        with _cd_tex_cwd:
+            if 'r' in mode:
+                is_readable, reason = self.tex_readable_file()
+                if not is_readable:
+                    raise PathSecurityError(f'Cannot read file "{self.as_posix()}":  {reason}')
+            elif any(char in mode for char in 'wxa'):
+                is_writable, reason = self.tex_writable_file()
+                if not is_writable:
+                    raise PathSecurityError(f'Cannot write file "{self.as_posix()}":  {reason}')
+            else:
+                raise NotImplementedError
+            if self._access_file_system_with_resolved_paths and not self.is_resolved():
+                return super(BaseRestrictedPath, self.resolve()).open(mode=mode, *args, **kwargs)
+            return super().open(mode=mode, *args, **kwargs)
 
     def read_bytes(self, *args, **kwargs):
-        if not self.is_readable_file():
-            raise PathSecurityError(
-                f'Cannot read file because it is outside permitted locations:  "{self.as_posix()}"'
-            )
-        return super().read_bytes(*args, **kwargs)
+        with _cd_tex_cwd:
+            is_readable, reason = self.tex_readable_file()
+            if not is_readable:
+                raise PathSecurityError(f'Cannot read file "{self.as_posix()}":  {reason}')
+            if self._access_file_system_with_resolved_paths and not self.is_resolved():
+                return super(BaseRestrictedPath, self.resolve()).read_bytes(*args, **kwargs)
+            return super().read_bytes(*args, **kwargs)
 
-    def read_text(self, encoding='utf-8-sig', errors='strict') -> str:
-        if not self.is_readable_file():
-            raise PathSecurityError(
-                f'Cannot read file because it is outside permitted locations:  "{self.as_posix()}"'
-            )
-        return super().read_text(encoding=encoding, errors=errors)
+    def read_text(self, *args, **kwargs) -> str:
+        with _cd_tex_cwd:
+            is_readable, reason = self.tex_readable_file()
+            if not is_readable:
+                raise PathSecurityError(f'Cannot read file "{self.as_posix()}":  {reason}')
+            if self._access_file_system_with_resolved_paths and not self.is_resolved():
+                return super(BaseRestrictedPath, self.resolve()).read_text(*args, **kwargs)
+            return super().read_text(*args, **kwargs)
 
-    def rename(self, *args, **kwargs):
-        raise NotImplementedError
+    def rename(self, target: Self):
+        with _cd_tex_cwd:
+            is_writable, reason = self.tex_writable_file()
+            if not is_writable:
+                raise PathSecurityError(f'Cannot rename file "{self.as_posix()}":  {reason}')
+            target_is_writable, target_reason = target.tex_writable_file()
+            if not target_is_writable:
+                raise PathSecurityError(f'Cannot create renamed file "{target.as_posix()}":  {target_reason}')
+            if self._access_file_system_with_resolved_paths and not (self.is_resolved() and target.is_resolved()):
+                return super(BaseRestrictedPath, self.resolve()).rename(target.resolve())
+            return super().rename(target)
 
-    def replace(self, target: RestrictedPath):
-        if not self.is_writable_file():
-            raise PathSecurityError(
-                f'Cannot replace file because it is outside permitted locations:  "{self.as_posix()}"'
-            )
-        if not target.is_writable_file():
-            raise PathSecurityError(
-                f'Cannot create replacement file because it is outside permitted locations:  "{target.as_posix()}"'
-            )
-        return super().replace(target)
+    def replace(self, target: Self):
+        with _cd_tex_cwd:
+            is_writable, reason = self.tex_writable_file()
+            if not is_writable:
+                raise PathSecurityError(f'Cannot replace file "{self.as_posix()}":  {reason}')
+            target_is_writable, target_reason = target.tex_writable_file()
+            if not target_is_writable:
+                raise PathSecurityError(f'Cannot create replacement file "{target.as_posix()}":  {target_reason}')
+            if self._access_file_system_with_resolved_paths and not (self.is_resolved() and target.is_resolved()):
+                return super(BaseRestrictedPath, self.resolve()).replace(target.resolve())
+            return super().replace(target)
 
     def rmdir(self):
-        if not self.is_writable_dir():
-            raise PathSecurityError(
-                f'Cannot delete directory because it is outside permitted locations:  "{self.as_posix()}"'
-            )
-        return super().rmdir()
+        with _cd_tex_cwd:
+            is_writable, reason = self.tex_writable_dir()
+            if not is_writable:
+                raise PathSecurityError(f'Cannot delete directory "{self.as_posix()}":  {reason}')
+            if self._access_file_system_with_resolved_paths and not self.is_resolved():
+                return super(BaseRestrictedPath, self.resolve()).rmdir()
+            return super().rmdir()
 
     def symlink_to(self, *args, **kwargs):
         raise NotImplementedError
@@ -263,84 +229,394 @@ class RestrictedPath(type(AnyPath())):
         raise NotImplementedError
 
     def touch(self, *args, **kwargs):
-        raise NotImplementedError
+        with _cd_tex_cwd:
+            is_writable, reason = self.tex_writable_file()
+            if not is_writable:
+                raise PathSecurityError(f'Cannot create file "{self.as_posix()}":  {reason}')
+            if self._access_file_system_with_resolved_paths and not self.is_resolved():
+                return super(BaseRestrictedPath, self.resolve()).touch(*args, **kwargs)
+            return super().touch(*args, **kwargs)
 
-    def unlink(self, missing_ok: bool = False):
-        if not self.is_writable_file():
-            raise PathSecurityError(
-                f'Cannot delete file because it is outside permitted locations:  "{self.as_posix()}"'
-            )
-        return super().unlink(missing_ok=missing_ok)
+    def unlink(self, *args, **kwargs):
+        with _cd_tex_cwd:
+            is_writable, reason = self.tex_writable_file()
+            if not is_writable:
+                raise PathSecurityError(f'Cannot delete file "{self.as_posix()}":  {reason}')
+            if self._access_file_system_with_resolved_paths and not self.is_resolved():
+                return super(BaseRestrictedPath, self.resolve()).unlink(*args, **kwargs)
+            return super().unlink(*args, **kwargs)
 
     def write_bytes(self, *args, **kwargs):
-        raise NotImplementedError
+        with _cd_tex_cwd:
+            is_writable, reason = self.tex_writable_file()
+            if not is_writable:
+                raise PathSecurityError(f'Cannot write file "{self.as_posix()}":  {reason}')
+            if self._access_file_system_with_resolved_paths and not self.is_resolved():
+                return super(BaseRestrictedPath, self.resolve()).write_bytes(*args, **kwargs)
+            return super().write_bytes(*args, **kwargs)
 
-    def write_text(self, data: str, encoding: str = 'utf8', **kwargs):
-        if not self.is_writable_file():
-            raise PathSecurityError(
-                f'Cannot write file because it is outside permitted locations:  "{self.as_posix()}"'
-            )
-        return super().write_text(data, encoding=encoding, **kwargs)
+    def write_text(self, *args, **kwargs):
+        with _cd_tex_cwd:
+            is_writable, reason = self.tex_writable_file()
+            if not is_writable:
+                raise PathSecurityError(f'Cannot write file "{self.as_posix()}":  {reason}')
+            if self._access_file_system_with_resolved_paths and not self.is_resolved():
+                return super(BaseRestrictedPath, self.resolve()).write_text(*args, **kwargs)
+            return super().write_text(*args, **kwargs)
 
 
     @classmethod
     def tex_cwd(cls) -> Self:
-        return cls(_cwd_anypath)
+        try:
+            return cls._tex_cwd
+        except AttributeError:
+            cls._tex_cwd = cls(latex_config.tex_cwd)
+            return cls._tex_cwd
 
     @classmethod
     def TEXMFOUTPUT(cls) -> Self | None:
-        if _TEXMFOUTPUT_anypath_resolved is None:
-            return None
-        return cls(_TEXMFOUTPUT_anypath_resolved)
+        try:
+            return cls._TEXMFOUTPUT
+        except AttributeError:
+            if latex_config.TEXMFOUTPUT is None:
+                cls._TEXMFOUTPUT = None
+            else:
+                cls._TEXMFOUTPUT = cls(latex_config.TEXMFOUTPUT)
+            return cls._TEXMFOUTPUT
 
     @classmethod
     def TEXMF_OUTPUT_DIRECTORY(cls) -> Self | None:
-        if _TEXMF_OUTPUT_DIRECTORY_anypath_resolved is None:
-            return None
-        return cls(_TEXMF_OUTPUT_DIRECTORY_anypath_resolved)
-
-    @classmethod
-    def openout_roots(cls) -> list[Self]:
-        openout_roots: list[Self] = []
-        TEXMF_OUTPUT_DIRECTORY = cls.TEXMF_OUTPUT_DIRECTORY()
-        if TEXMF_OUTPUT_DIRECTORY:
-            openout_roots.append(TEXMF_OUTPUT_DIRECTORY)
-        else:
-            openout_roots.append(cls.tex_cwd())
-        TEXMFOUTPUT = cls.TEXMFOUTPUT()
-        if TEXMFOUTPUT and TEXMFOUTPUT not in openout_roots:
-            openout_roots.append(TEXMFOUTPUT)
-        return openout_roots
-
-    @classmethod
-    def all_writable_roots(cls) -> set[Self]:
-        all_writable_roots: set[Self] = set()
-        all_writable_roots.add(cls.tex_cwd())
-        TEXMF_OUTPUT_DIRECTORY = cls.TEXMF_OUTPUT_DIRECTORY()
-        if TEXMF_OUTPUT_DIRECTORY:
-            all_writable_roots.add(TEXMF_OUTPUT_DIRECTORY)
-        TEXMFOUTPUT = cls.TEXMFOUTPUT()
-        if TEXMFOUTPUT:
-            all_writable_roots.add(TEXMFOUTPUT)
-        return all_writable_roots
-
-
-
-
-def latexminted_config_read_bytes() -> list[bytes]:
-    '''
-    Read minted config files from the user home directory and TEXMFHOME.
-    These are dot files and thus cannot be accessed via `RestrictedPath`.
-    '''
-    config_bytes_list = []
-    try:
-        config_bytes_list.append(AnyPath('~/.latexminted_config').expanduser().read_bytes())
-    except (FileNotFoundError, PermissionError):
-        pass
-    latex_config_texmf = latex_config.kpsewhich_find_config_file('.latexminted_config')
-    if latex_config_texmf:
         try:
-            config_bytes_list.append(AnyPath(latex_config_texmf).read_bytes())
-        except (FileNotFoundError, PermissionError):
-            pass
-    return config_bytes_list
+            return cls._TEXMF_OUTPUT_DIRECTORY
+        except AttributeError:
+            if latex_config.TEXMF_OUTPUT_DIRECTORY is None:
+                cls._TEXMF_OUTPUT_DIRECTORY = None
+            else:
+                cls._TEXMF_OUTPUT_DIRECTORY = cls(latex_config.TEXMF_OUTPUT_DIRECTORY)
+            return cls._TEXMF_OUTPUT_DIRECTORY
+
+    @classmethod
+    def tex_openout_roots(cls) -> list[Self]:
+        try:
+            return cls._tex_openout_roots
+        except AttributeError:
+            cls._tex_openout_roots = []
+            TEXMF_OUTPUT_DIRECTORY = cls.TEXMF_OUTPUT_DIRECTORY()
+            if TEXMF_OUTPUT_DIRECTORY:
+                cls._tex_openout_roots.append(TEXMF_OUTPUT_DIRECTORY)
+            else:
+                cls._tex_openout_roots.append(cls.tex_cwd())
+            TEXMFOUTPUT = cls.TEXMFOUTPUT()
+            if TEXMFOUTPUT and TEXMFOUTPUT not in cls._tex_openout_roots:
+                cls._tex_openout_roots.append(TEXMFOUTPUT)
+            return cls._tex_openout_roots
+
+    @classmethod
+    def tex_paranoid_roots(cls) -> set[Self]:
+        try:
+            return cls._tex_paranoid_roots
+        except AttributeError:
+            cls._tex_paranoid_roots = set()
+            cls._tex_paranoid_roots.add(cls.tex_cwd())
+            TEXMF_OUTPUT_DIRECTORY = cls.TEXMF_OUTPUT_DIRECTORY()
+            if TEXMF_OUTPUT_DIRECTORY:
+                cls._tex_paranoid_roots.add(TEXMF_OUTPUT_DIRECTORY)
+            TEXMFOUTPUT = cls.TEXMFOUTPUT()
+            if TEXMFOUTPUT:
+                cls._tex_paranoid_roots.add(TEXMFOUTPUT)
+            return cls._tex_paranoid_roots
+
+    @classmethod
+    def tex_paranoid_roots_resolved(cls) -> set[Self]:
+        try:
+            return cls._tex_paranoid_roots_resolved
+        except AttributeError:
+            cls._tex_paranoid_roots_resolved = set(x.resolve() for x in cls.tex_paranoid_roots())
+            return cls._tex_paranoid_roots_resolved
+
+    @classmethod
+    def tex_paranoid_roots_with_resolved(cls) -> set[Self]:
+        try:
+            return cls._tex_paranoid_roots_with_resolved
+        except KeyError:
+            cls._tex_paranoid_roots_with_resolved = cls.tex_paranoid_roots() | cls.tex_paranoid_roots_resolved()
+            return cls._tex_paranoid_roots_with_resolved
+
+    @classmethod
+    def tex_texmfoutput_roots(cls) -> set[Self]:
+        try:
+            return cls._tex_texmfoutput_roots
+        except AttributeError:
+            cls._tex_texmfoutput_roots = set()
+            TEXMF_OUTPUT_DIRECTORY = cls.TEXMF_OUTPUT_DIRECTORY()
+            if TEXMF_OUTPUT_DIRECTORY:
+                cls._tex_texmfoutput_roots.add(TEXMF_OUTPUT_DIRECTORY)
+            TEXMFOUTPUT = cls.TEXMFOUTPUT()
+            if TEXMFOUTPUT:
+                cls._tex_texmfoutput_roots.add(TEXMFOUTPUT)
+            return cls._tex_texmfoutput_roots
+
+
+
+
+class StringRestrictedPath(BaseRestrictedPath):
+    '''
+    Restrict paths by analyzing them as strings.  This follows the approach
+    taken in TeX's file system security.  For example, see
+    https://www.tug.org/texinfohtml/kpathsea.html#Safe-filenames-1 and
+    https://tug.org/svn/texlive/trunk/Build/source/texk/kpathsea/progname.c?revision=57915&view=markup#l414.
+    Restrictions depend on LaTeX configuration.  Restrictions are determined
+    by `openout_any` and `openin_any` settings in `texmf.cnf` for TeX Live,
+    and from `[Core]AllowUnsafeInputFiles` and `[Core]AllowUnsafeOutputFiles`
+    in `miktex.ini` for MiKTeX.  These variables are accessed via
+    `latex_config`.
+
+    When reading or writing locations are restricted to the TeX working
+    directory plus $TEXMF_OUTPUT_DIRECTORY and $TEXMFOUTPUT, paths are
+    restricted using the following criteria:
+
+      * All relative paths are relative to the TeX working directory.
+        (This is already enforced by `BaseRestrictedPath`.)
+
+      * All absolute paths must be under $TEXMF_OUTPUT_DIRECTORY and
+        $TEXMFOUTPUT.
+
+      * Paths cannot contain `..` to access a parent directory, even if the
+        parent directory is a valid location.
+
+    Because paths are analyzed as strings, it is still possible to access
+    locations outside the TeX working directory, $TEXMF_OUTPUT_DIRECTORY, and
+    $TEXMFOUTPUT via symlinks in these locations.  Symlinks are not resolved
+    in determining whether paths are valid, since paths are analyzed as
+    strings without consulting the file system.
+
+    Depending on LaTeX configuration, reading or writing file names starting
+    with `.` (dotfiles) may be disabled.
+
+    Under Windows, writing files with file extensions in `PATHEXT` is also
+    disabled.
+    '''
+
+    __slots__ = ()
+
+    _access_file_system_with_resolved_paths = False
+
+    def tex_readable_dir(self) -> tuple[Literal[True], None] | tuple[Literal[False], str]:
+        try:
+            return self._tex_readable_dir_cache[self.cache_key]
+        except KeyError:
+            if self._tex_can_read_anywhere:
+                self._tex_readable_dir_cache[self.cache_key] = (True, None)
+            elif '..' in self.parts:
+                self._tex_readable_dir_cache[self.cache_key] = (
+                    False,
+                    'security settings do not permit paths containing ".."'
+                )
+            elif self.is_absolute() and not any(self.is_relative_to(p) for p in self.tex_texmfoutput_roots()):
+                self._tex_readable_dir_cache[self.cache_key] = (
+                    False,
+                    'security settings do not permit access to this location'
+                )
+            else:
+                self._tex_readable_dir_cache[self.cache_key] = (True, None)
+            return self._tex_readable_dir_cache[self.cache_key]
+
+    def tex_readable_file(self) -> tuple[Literal[True], None] | tuple[Literal[False], str]:
+        try:
+            return self._tex_readable_file_cache[self.cache_key]
+        except KeyError:
+            if self._tex_can_read_dotfiles or not self.name.startswith('.'):
+                self._tex_readable_file_cache[self.cache_key] = self.parent.tex_readable_dir()
+            else:
+                self._tex_readable_file_cache[self.cache_key] = (
+                    False,
+                    'security settings do not permit access to dotfiles'
+                )
+            return self._tex_readable_file_cache[self.cache_key]
+
+    def tex_writable_dir(self) -> tuple[Literal[True], None] | tuple[Literal[False], str]:
+        try:
+            return self._tex_writable_dir_cache[self.cache_key]
+        except KeyError:
+            if self._tex_can_write_anywhere:
+                self._tex_writable_dir_cache[self.cache_key] = (True, None)
+            elif '..' in self.parts:
+                self._tex_writable_dir_cache[self.cache_key] = (
+                    False,
+                    'security settings do not permit paths containing ".."'
+                )
+            elif self.is_absolute() and not any(self.is_relative_to(p) for p in self.tex_texmfoutput_roots()):
+                self._tex_writable_dir_cache[self.cache_key] = (
+                    False,
+                    'security settings do not permit access to this location'
+                )
+            else:
+                self._tex_writable_dir_cache[self.cache_key] = (True, None)
+            return self._tex_writable_dir_cache[self.cache_key]
+
+    def tex_writable_file(self) -> tuple[Literal[True], None] | tuple[Literal[False], str]:
+        try:
+            return self._tex_writable_file_cache[self.cache_key]
+        except KeyError:
+            name_lower = self.name.lower()
+            for ext in self._tex_prohibited_write_file_extensions:
+                if name_lower.endswith(ext):
+                    self._tex_writable_file_cache[self.cache_key] = (
+                        False,
+                        f'security settings prevent writing files with extension "{ext}"'
+                    )
+                    break
+            else:
+                if self._tex_can_write_dotfiles or not self.name.startswith('.'):
+                    self._tex_writable_file_cache[self.cache_key] = self.parent.tex_writable_dir()
+                else:
+                    self._tex_writable_file_cache[self.cache_key] = (
+                        False,
+                        'security settings do not permit access to dotfiles'
+                    )
+            return self._tex_writable_file_cache[self.cache_key]
+
+
+class SafeStringRestrictedPath(StringRestrictedPath):
+    __slots__ = ()
+    _tex_can_read_anywhere = False
+    _tex_can_read_dotfiles = False
+    _tex_can_write_anywhere = False
+    _tex_can_write_dotfiles = False
+
+
+class SafeOutputStringRestrictedPath(StringRestrictedPath):
+    __slots__ = ()
+    _tex_can_write_anywhere = False
+    _tex_can_write_dotfiles = False
+
+
+
+
+class ResolvedRestrictedPath(BaseRestrictedPath):
+    '''
+    Restrict paths by resolving any symlinks with the file system and then
+    comparing resolved paths to permitted read/write locations.  Restrictions
+    are determined by `openout_any` and `openin_any` settings in `texmf.cnf`
+    for TeX Live, and from `[Core]AllowUnsafeInputFiles` and
+    `[Core]AllowUnsafeOutputFiles` in `miktex.ini` for MiKTeX.  These
+    variables are accessed via `latex_config`.
+
+    When reading or writing locations are restricted to the TeX working
+    directory plus $TEXMF_OUTPUT_DIRECTORY and $TEXMFOUTPUT, paths are
+    restricted using the following criteria:
+
+      * Resolved paths must be under the TeX working directory,
+        $TEXMF_OUTPUT_DIRECTORY, or $TEXMFOUTPUT.
+
+      * All relative paths are resolved relative to the TeX working directory.
+        (This is already enforced by `BaseRestrictedPath`.)
+
+      * Unlike `StringRestrictedPath`, paths are allowed to contain `..`, and
+        $TEXMF_OUTPUT_DIRECTORY and $TEXMFOUTPUT can be accessed via relative
+        paths.  This is possible since paths are fully resolved with the file
+        system before being compared with permitted read/write locations.
+
+    Because paths are resolved before being compared with permitted read/write
+    locations, it is not possible to access locations outside the TeX working
+    directory, $TEXMF_OUTPUT_DIRECTORY, and $TEXMFOUTPUT via symlinks in these
+    locations.
+
+    Depending on LaTeX configuration, reading or writing file names starting
+    with `.` (dotfiles) may be disabled.
+
+    Under Windows, writing files with file extensions in `PATHEXT` is also
+    disabled.
+    '''
+
+    __slots__ = ()
+
+    _access_file_system_with_resolved_paths = True
+
+    def tex_readable_dir(self) -> tuple[Literal[True], None] | tuple[Literal[False], str]:
+        try:
+            return self._tex_readable_dir_cache[self.cache_key]
+        except KeyError:
+            if self._tex_can_read_anywhere:
+                self._tex_readable_dir_cache[self.cache_key] = (True, None)
+            else:
+                resolved = self.resolve()
+                if any(resolved.is_relative_to(p) for p in self.tex_paranoid_roots_resolved()):
+                    self._tex_readable_dir_cache[self.cache_key] = (True, None)
+                else:
+                    self._tex_readable_dir_cache[self.cache_key] = (
+                        False,
+                        'security settings do not permit access to this location'
+                    )
+            return self._tex_readable_dir_cache[self.cache_key]
+
+    def tex_readable_file(self) -> tuple[Literal[True], None] | tuple[Literal[False], str]:
+        try:
+            return self._tex_readable_file_cache[self.cache_key]
+        except KeyError:
+            if self._tex_can_read_dotfiles:
+                self._tex_readable_file_cache[self.cache_key] = self.parent.tex_readable_dir()
+            else:
+                resolved = self.resolve()
+                if not resolved.name.startswith('.'):
+                    self._tex_readable_file_cache[self.cache_key] = self.parent.tex_readable_dir()
+                else:
+                    self._tex_readable_file_cache[self.cache_key] = (
+                        False,
+                        'security settings do not permit access to dotfiles'
+                    )
+            return self._tex_readable_file_cache[self.cache_key]
+
+    def tex_writable_dir(self) -> tuple[Literal[True], None] | tuple[Literal[False], str]:
+        try:
+            return self._tex_writable_dir_cache[self.cache_key]
+        except KeyError:
+            if self._tex_can_write_anywhere:
+                self._tex_writable_dir_cache[self.cache_key] = (True, None)
+            else:
+                resolved = self.resolve()
+                if any(resolved.is_relative_to(p) for p in self.tex_paranoid_roots_resolved()):
+                    self._tex_writable_dir_cache[self.cache_key] = (True, None)
+                else:
+                    self._tex_writable_dir_cache[self.cache_key] = (
+                        False,
+                        'security settings do not permit access to this location'
+                    )
+            return self._tex_writable_dir_cache[self.cache_key]
+
+    def tex_writable_file(self) -> tuple[Literal[True], None] | tuple[Literal[False], str]:
+        try:
+            return self._tex_writable_file_cache[self.cache_key]
+        except KeyError:
+            resolved = self.resolve()
+            name_lower = resolved.name.lower()
+            for ext in self._tex_prohibited_write_file_extensions:
+                if name_lower.endswith(ext):
+                    self._tex_writable_file_cache[self.cache_key] = (
+                        False,
+                        f'security settings prevent writing files with extension "{ext}"'
+                    )
+                    break
+            else:
+                if self._tex_can_write_dotfiles or not resolved.name.startswith('.'):
+                    self._tex_writable_file_cache[self.cache_key] = resolved.parent.tex_writable_dir()
+                else:
+                    self._tex_writable_file_cache[self.cache_key] = (
+                        False,
+                        'security settings do not permit access to dotfiles'
+                    )
+            return self._tex_writable_file_cache[self.cache_key]
+
+
+class SafeResolvedRestrictedPath(ResolvedRestrictedPath):
+    __slots__ = ()
+    _tex_can_read_anywhere = False
+    _tex_can_read_dotfiles = False
+    _tex_can_write_anywhere = False
+    _tex_can_write_dotfiles = False
+
+
+class SafeOutputResolvedRestrictedPath(ResolvedRestrictedPath):
+    __slots__ = ()
+    _tex_can_write_anywhere = False
+    _tex_can_write_dotfiles = False
