@@ -15,7 +15,7 @@ import platform
 import shutil
 import subprocess
 import sys
-from ..err import LatexConfigError
+from .err import LatexConfigError
 from ._anypath import AnyPath
 
 
@@ -61,11 +61,18 @@ class LatexConfig(object):
     _permitted_subprocess_executables = set(['kpsewhich', 'initexmf'])
     _permitted_subprocess_executables.update([f'{executable}.exe' for executable in _permitted_subprocess_executables])
 
-    _tex_cwd = AnyPath.cwd()
-    tex_cwd = str(_tex_cwd)
+    _tex_cwd_anypath: AnyPath = AnyPath.cwd()
+    _tex_cwd_str: str = str(_tex_cwd_anypath)
+
+    @property
+    def tex_cwd(self) -> str:
+        # This is a property so that it is more difficult to modify/so that
+        # any modifications are more obvious. `*RestrictedPath` classes depend
+        # on `.tex_cwd`, so modifying it bypasses security.
+        return self._tex_cwd_str
 
     _prohibited_subprocess_executable_roots: set[AnyPath] = set()
-    _prohibited_subprocess_executable_roots.add(_tex_cwd)
+    _prohibited_subprocess_executable_roots.add(_tex_cwd_anypath)
     for env_var in [os.getenv(x) for x in ('TEXMFOUTPUT', 'TEXMF_OUTPUT_DIRECTORY')]:
         if env_var:
             _prohibited_subprocess_executable_roots.add(AnyPath(env_var))
@@ -404,12 +411,23 @@ class LatexConfig(object):
         return self._can_write_anywhere
 
     _prohibited_write_file_extensions: set[str]
+    # https://learn.microsoft.com/en-us/windows-server/administration/windows-commands/start
+    _microsoft_default_pathext = '.COM;.EXE;.BAT;.CMD;.VBS;.VBE;.JS;.JSE;.WSF;.WSH;.MSC'
+    # https://tug.org/svn/texlive/trunk/Build/source/texk/kpathsea/progname.c?revision=57915&view=markup#l415
+    _kpathsea_default_pathext = '.com;.exe;.bat;.cmd;.vbs;.vbe;.js;.jse;.wsf;.wsh;.ws;.tcl;.py;.pyw'
+    _fallback_prohibited_write_file_extensions: set[str] = set(
+        ';'.join([_microsoft_default_pathext, _kpathsea_default_pathext]).lower().split(';')
+    )
     if platform.system() == 'Windows':
-        # Fallback value:
-        # https://learn.microsoft.com/en-us/windows-server/administration/windows-commands/start
-        _prohibited_write_file_extensions = set(
-            (os.getenv('PATHEXT') or '.COM;.EXE;.BAT;.CMD;.VBS;.VBE;.JS;.JSE;.WSF;.WSH;.MSC').lower().split(os.pathsep)
-        )
+        _pathext = os.getenv('PATHEXT')
+        if _pathext:
+            _prohibited_write_file_extensions = set(_pathext.lower().split(os.pathsep))
+        else:
+            _prohibited_write_file_extensions = _fallback_prohibited_write_file_extensions
+    elif platform.system().lower().startswith('cygwin'):
+        # This follows kpathsea:
+        # https://tug.org/svn/texlive/trunk/Build/source/texk/kpathsea/progname.c?revision=57915&view=markup#l424
+        _prohibited_write_file_extensions = _fallback_prohibited_write_file_extensions
     else:
         _prohibited_write_file_extensions = set()
 
