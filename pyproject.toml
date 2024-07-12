@@ -1,0 +1,48 @@
+[build-system]
+requires = ['setuptools']
+
+
+[project]
+name = 'latexrestricted'
+description = 'Library for creating Python executables compatible with LaTeX restricted shell escape'
+readme = 'README.md'
+requires-python = '>= 3.8'
+authors = [
+    {name = 'Geoffrey M. Poore', email = 'gpoore@gmail.com'}
+]
+license = {file = 'LICENSE.txt'}
+dynamic = ['version']
+keywords = [
+    'LaTeX',
+    'security',
+    'restricted shell escape',
+]
+dependencies = [
+]
+# https://pypi.python.org/pypi?:action=list_classifiers
+classifiers = [
+    'Development Status :: 4 - Beta',
+    'Programming Language :: Python',
+    'Environment :: Console',
+    'Intended Audience :: Developers',
+    'License :: OSI Approved',
+    'Operating System :: OS Independent',
+    'Topic :: Text Processing :: Markup :: LaTeX',
+]
+
+
+[project.urls]
+homepage = 'https://github.com/gpoore/latexrestricted'
+repository = 'https://github.com/gpoore/latexrestricted'
+changelog = 'https://github.com/gpoore/latexrestricted/blob/main/CHANGELOG.md'
+
+
+[tool.setuptools]
+license-files = ['LICENSE*', 'CHANGELOG*', 'RESTRICTED_SHELL_ESCAPE*']
+
+[tool.setuptools.dynamic]
+version = {attr = 'latexrestricted.__version__'}
+
+
+[tool.ruff]
+line-length = 120
