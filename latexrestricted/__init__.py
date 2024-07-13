@@ -10,14 +10,15 @@
 
 from __future__ import annotations
 
+from .err import *
 from ._latex_config import latex_config
 from ._restricted_pathlib import (
     BaseRestrictedPath,
     StringRestrictedPath,
     SafeStringRestrictedPath,
-    SafeOutputStringRestrictedPath,
+    SafeWriteStringRestrictedPath,
     ResolvedRestrictedPath,
     SafeResolvedRestrictedPath,
-    SafeOutputResolvedRestrictedPath,
+    SafeWriteResolvedRestrictedPath,
 )
 from ._restricted_subprocess import restricted_run
