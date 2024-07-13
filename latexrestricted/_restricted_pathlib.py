@@ -485,7 +485,7 @@ class SafeStringRestrictedPath(StringRestrictedPath):
     _tex_can_write_dotfiles = False
 
 
-class SafeOutputStringRestrictedPath(StringRestrictedPath):
+class SafeWriteStringRestrictedPath(StringRestrictedPath):
     __slots__ = ()
     _tex_can_write_anywhere = False
     _tex_can_write_dotfiles = False
@@ -519,7 +519,7 @@ class ResolvedRestrictedPath(BaseRestrictedPath):
 
     Because paths are resolved before being compared with permitted read/write
     locations, it is not possible to access locations outside the TeX working
-    directory, $TEXMF_OUTPUT_DIRECTORY, and $TEXMFOUTPUT via symlinks in these
+    directory, $TEXMF_OUTPUT_DIRECTORY, and $TEXMFOUTPUT via symlinks in those
     locations.
 
     Depending on LaTeX configuration, reading or writing file names starting
@@ -616,7 +616,7 @@ class SafeResolvedRestrictedPath(ResolvedRestrictedPath):
     _tex_can_write_dotfiles = False
 
 
-class SafeOutputResolvedRestrictedPath(ResolvedRestrictedPath):
+class SafeWriteResolvedRestrictedPath(ResolvedRestrictedPath):
     __slots__ = ()
     _tex_can_write_anywhere = False
     _tex_can_write_dotfiles = False
