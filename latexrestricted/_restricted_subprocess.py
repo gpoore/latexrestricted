@@ -67,6 +67,10 @@ def restricted_run(args: list[str], allow_restricted_executables: bool = False) 
 
     executable = args[0]
     if executable not in _always_approved_executables:
+        if not latex_config.can_restricted_shell_escape:
+            raise UnapprovedExecutableError(
+                f'Executable "{executable}" cannot be used when (restricted) shell escape is disabled'
+            )
         if not allow_restricted_executables or executable not in latex_config.restricted_shell_escape_commands:
             raise UnapprovedExecutableError(f'Executable "{executable}" is not in the approved list')
 

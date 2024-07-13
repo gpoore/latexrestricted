@@ -49,6 +49,11 @@ class LatexConfig(object):
     `texmf.cnf` for TeX Live, and from `[Core]AllowUnsafeInputFiles` and
     `[Core]AllowUnsafeOutputFiles` in `miktex.ini` for MiKTeX.
 
+    Shell escape settings are available via the property
+    `can_restricted_shell_escape`.  This is based on `shell_escape` in
+    `texmf.cnf` for TeX Live, and on `[Core]ShellCommandMode` in `miktex.ini`
+    for MiKTeX.
+
     Python properties and caching are used extensively so that `kpsewhich` and
     `initexmf` subprocesses only run when their output is actually used and
     has not been obtained previously.
@@ -435,6 +440,36 @@ class LatexConfig(object):
     def prohibited_write_file_extensions(self) -> set[str]:
         return self._prohibited_write_file_extensions
 
+    _did_init_shell_escape_settings: bool = False
+    _can_restricted_shell_escape: bool
+
+    @classmethod
+    def _init_shell_escape_settings(cls):
+        if not cls._did_init_tex_paths:
+            cls._init_tex_paths()
+        if cls._texlive_kpsewhich:
+            # https://tug.org/svn/texlive/trunk/Build/source/texk/kpathsea/texmf.cnf?revision=70942&view=markup#l634
+            shell_escape = cls._get_texlive_var_value('shell_escape')
+            if shell_escape and shell_escape.lower() in ('t', 'p'):
+                cls._can_restricted_shell_escape = True
+            else:
+                cls._can_restricted_shell_escape = False
+        elif cls._miktex_initexmf:
+            # https://docs.miktex.org/manual/miktex.ini.html
+            shell_command_mode = cls._get_miktex_config_value('[Core]ShellCommandMode')
+            if shell_command_mode and shell_command_mode.lower() in ('restricted', 'unrestricted'):
+                cls._can_restricted_shell_escape = True
+            else:
+                cls._can_restricted_shell_escape = False
+        else:
+            raise TypeError
+        cls._did_init_shell_escape_settings = True
+
+    @property
+    def can_restricted_shell_escape(self):
+        if not self._did_init_shell_escape_settings:
+            self._init_shell_escape_settings()
+        return self._can_restricted_shell_escape
 
     _var_cache: dict[str, str | None] = {}
 
