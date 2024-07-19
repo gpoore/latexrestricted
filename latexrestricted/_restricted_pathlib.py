@@ -98,8 +98,8 @@ class BaseRestrictedPath(type(AnyPath())):
     # accessed with a path as the path is currently defined.  If true, the
     # path is resolved first.  This should be true for subclasses that perform
     # path security analysis using resolved paths.  Otherwise, the file system
-    # could be modified after security analysis but before a path is used, so
-    # that the security analysis is invalid.
+    # (symlinks) could be modified after security analysis but before a path
+    # is used, so that the security analysis is invalid.
     _access_file_system_with_resolved_paths: bool
 
     # Default security is based on TeX configuration.  Subclasses can override
@@ -297,6 +297,10 @@ class BaseRestrictedPath(type(AnyPath())):
 
     @classmethod
     def tex_openout_roots(cls) -> list[Self]:
+        # This is a list of paths because these are the directories that TeX
+        # will try to write to in order.  If TEXMF_OUTPUT_DIRECTORY or the
+        # current working directory is not writable, then TeX will fall back
+        # to TEXMFOUTPUT if it is set.
         try:
             return cls._tex_openout_roots
         except AttributeError:
@@ -313,6 +317,8 @@ class BaseRestrictedPath(type(AnyPath())):
 
     @classmethod
     def tex_paranoid_roots(cls) -> set[Self]:
+        # All possible paths that TeX can write to when write locations are
+        # restricted ("paranoid" mode).
         try:
             return cls._tex_paranoid_roots
         except AttributeError:
@@ -331,7 +337,7 @@ class BaseRestrictedPath(type(AnyPath())):
         try:
             return cls._tex_paranoid_roots_resolved
         except AttributeError:
-            cls._tex_paranoid_roots_resolved = set(x.resolve() for x in cls.tex_paranoid_roots())
+            cls._tex_paranoid_roots_resolved = set(p.resolve() for p in cls.tex_paranoid_roots())
             return cls._tex_paranoid_roots_resolved
 
     @classmethod
@@ -375,8 +381,8 @@ class StringRestrictedPath(BaseRestrictedPath):
     directory plus $TEXMF_OUTPUT_DIRECTORY and $TEXMFOUTPUT, paths are
     restricted using the following criteria:
 
-      * All relative paths are relative to the TeX working directory.
-        (This is already enforced by `BaseRestrictedPath`.)
+      * All relative paths are relative to the TeX working directory.  (This
+        is already enforced by `BaseRestrictedPath`.)
 
       * All absolute paths must be under $TEXMF_OUTPUT_DIRECTORY and
         $TEXMFOUTPUT.
@@ -393,8 +399,8 @@ class StringRestrictedPath(BaseRestrictedPath):
     Depending on LaTeX configuration, reading or writing file names starting
     with `.` (dotfiles) may be disabled.
 
-    Under Windows, writing files with file extensions in `PATHEXT` is also
-    disabled.
+    Under Windows (including Cygwin), writing files with file extensions in
+    `PATHEXT` is also disabled.
     '''
 
     __slots__ = ()
@@ -525,8 +531,8 @@ class ResolvedRestrictedPath(BaseRestrictedPath):
     Depending on LaTeX configuration, reading or writing file names starting
     with `.` (dotfiles) may be disabled.
 
-    Under Windows, writing files with file extensions in `PATHEXT` is also
-    disabled.
+    Under Windows (including Cygwin), writing files with file extensions in
+    `PATHEXT` is also disabled.
     '''
 
     __slots__ = ()
@@ -554,17 +560,16 @@ class ResolvedRestrictedPath(BaseRestrictedPath):
         try:
             return self._tex_readable_file_cache[self.cache_key]
         except KeyError:
-            if self._tex_can_read_dotfiles:
-                self._tex_readable_file_cache[self.cache_key] = self.parent.tex_readable_dir()
+            # Must always resolve files in case they are symlinks.  Always use
+            # `self.resolve().parent` instead of `self.parent`.
+            resolved = self.resolve()
+            if self._tex_can_read_dotfiles or not any(p.name.startswith('.') for p in (self, resolved)):
+                self._tex_readable_file_cache[self.cache_key] = resolved.parent.tex_readable_dir()
             else:
-                resolved = self.resolve()
-                if not resolved.name.startswith('.'):
-                    self._tex_readable_file_cache[self.cache_key] = self.parent.tex_readable_dir()
-                else:
-                    self._tex_readable_file_cache[self.cache_key] = (
-                        False,
-                        'security settings do not permit access to dotfiles'
-                    )
+                self._tex_readable_file_cache[self.cache_key] = (
+                    False,
+                    'security settings do not permit access to dotfiles'
+                )
             return self._tex_readable_file_cache[self.cache_key]
 
     def tex_writable_dir(self) -> tuple[Literal[True], None] | tuple[Literal[False], str]:
@@ -589,16 +594,17 @@ class ResolvedRestrictedPath(BaseRestrictedPath):
             return self._tex_writable_file_cache[self.cache_key]
         except KeyError:
             resolved = self.resolve()
-            name_lower = resolved.name.lower()
+            name_lower = self.name.lower()
+            resolved_name_lower = resolved.name.lower()
             for ext in self._tex_prohibited_write_file_extensions:
-                if name_lower.endswith(ext):
+                if name_lower.endswith(ext) or resolved_name_lower.endswith(ext):
                     self._tex_writable_file_cache[self.cache_key] = (
                         False,
                         f'security settings prevent writing files with extension "{ext}"'
                     )
                     break
             else:
-                if self._tex_can_write_dotfiles or not resolved.name.startswith('.'):
+                if self._tex_can_write_dotfiles or not any(p.name.startswith('.') for p in (self, resolved)):
                     self._tex_writable_file_cache[self.cache_key] = resolved.parent.tex_writable_dir()
                 else:
                     self._tex_writable_file_cache[self.cache_key] = (
