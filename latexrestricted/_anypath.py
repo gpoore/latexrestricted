@@ -28,9 +28,9 @@ class AnyPath(type(pathlib.Path())):
         def is_relative_to(self, other: AnyPath) -> bool:
             try:
                 self.relative_to(other)
+                return True
             except ValueError:
                 return False
-            return True
 
         def with_stem(self, stem: str):
             return self.with_name(stem + self.suffix)
@@ -46,10 +46,11 @@ class AnyPath(type(pathlib.Path())):
             self._cache_key = (type(self), self)
             return self._cache_key
 
-    # `ResolvedRestrictedPath` uses `super().resolve()` frequently to
+    # `ResolvedRestrictedPath` classes use `super().resolve()` frequently to
     # determine whether paths are readable/writable.  `.resolve()` and
     # `.parent()` cache and track resolved paths to minimize file system
-    # access.
+    # access.  This also guarantees that a path will always resolve to the
+    # same location after it has been approved for reading/writing.
     _resolved_set: set[tuple[type[Self], Self]] = set()
     _resolve_cache: dict[tuple[type[Self], Self], Self] = {}
 
