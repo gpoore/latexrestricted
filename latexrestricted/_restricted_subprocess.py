@@ -67,12 +67,19 @@ def restricted_run(args: list[str], allow_restricted_executables: bool = False) 
 
     executable = args[0]
     if executable not in _always_approved_executables:
+        if not allow_restricted_executables:
+            raise UnapprovedExecutableError(
+                'Cannot use executables other than "kpsewhich" and "initexmf" '
+                'when argument "allow_restricted_executables" is False'
+            )
         if not latex_config.can_restricted_shell_escape:
             raise UnapprovedExecutableError(
                 f'Executable "{executable}" cannot be used when (restricted) shell escape is disabled'
             )
-        if not allow_restricted_executables or executable not in latex_config.restricted_shell_escape_commands:
-            raise UnapprovedExecutableError(f'Executable "{executable}" is not in the approved list')
+        if executable not in latex_config.restricted_shell_escape_commands:
+            raise UnapprovedExecutableError(
+                f'Executable "{executable}" is not in the approved list from LaTeX configuration'
+            )
 
     if latex_config.texlive_bin:
         which_executable = shutil.which(executable, path=latex_config.texlive_bin)
@@ -89,11 +96,14 @@ def restricted_run(args: list[str], allow_restricted_executables: bool = False) 
     which_executable_resolved = which_executable_path.resolve()
     if platform.system() == 'Windows' and not which_executable_resolved.name.lower().endswith('.exe'):
         raise UnapprovedExecutableError(
-            f'Executable "{executable}" resolved to "{which_executable_path.as_posix()}", but *.exe is required'
+            f'Executable "{executable}" resolved to "{which_executable_resolved.as_posix()}", but *.exe is required'
         )
-    if any(which_executable_path.name.lower().endswith(ext) for ext in ('.bat', '.cmd')):
+    if any(which_executable_resolved.name.lower().endswith(ext) for ext in ('.bat', '.cmd')):
         # This should be redundant
-        raise UnapprovedExecutableError(f'Executable "{executable}" not allowed (no *.bat or *.cmd)')
+        raise UnapprovedExecutableError(
+            f'Executable "{executable}" resolved to "{which_executable_resolved.as_posix()}", '
+            'but *.bat and *.cmd are not permitted'
+        )
 
     if any(e.is_relative_to(p) or p.is_relative_to(e)
            for e in set([which_executable_path.parent, which_executable_resolved.parent])
@@ -106,6 +116,6 @@ def restricted_run(args: list[str], allow_restricted_executables: bool = False) 
 
     # Use resolved executable path for subprocess to guarantee that the
     # correct executable is invoked.
-    resolved_args = [which_executable_path.as_posix()] + args[1:]
+    resolved_args = [which_executable_resolved.as_posix()] + args[1:]
     proc = subprocess.run(resolved_args, shell=False, capture_output=True)
     return proc
