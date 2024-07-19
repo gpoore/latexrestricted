@@ -40,9 +40,9 @@ class LatexConfig(object):
       * `can_write_dotfiles`
       * `can_write_anywhere`
 
-    The `*dotfile` settings determine whether files with names starting with a
+    The `*dotfile` settings describe whether files with names starting with a
     dot `.` are allowed to be read/written.  The `*anywhere` settings
-    determine whether files anywhere are allowed to be read/written, or only
+    describe whether files anywhere are allowed to be read/written, or only
     files within the current working directory, $TEXMFOUTPUT,
     $TEXMF_OUTPUT_DIRECTORY, and their subdirectories.  The values of these
     properties are determined from `openout_any` and `openin_any` settings in
@@ -90,7 +90,7 @@ class LatexConfig(object):
         # `executable_path` is always from `shutil.which(<name>)`.
         if executable_resolved.name not in cls._permitted_subprocess_executables:
             raise LatexConfigError(
-                f'Executable "{executable_name}" resolved to "{executable_resolved}", '
+                f'Executable "{executable_name}" resolved to "{executable_resolved.as_posix()}", '
                 f'but "{executable_resolved.name}" is not one of the permitted executables '
                 'for determining LaTeX configuration'
             )
@@ -109,7 +109,7 @@ class LatexConfig(object):
                for p in cls._prohibited_subprocess_executable_roots):
             # This doesn't check for the scenario where `TEXMFOUTPUT` is
             # set in a `texmf.cnf` config file.  There isn't a good way to
-            # check for that without `kpsewhich`.
+            # check for that without running `kpsewhich`.
             raise LatexConfigError(
                 f'Executable "{executable_name}" is located under the current directory, $TEXMFOUTPUT, or '
                 '$TEXMF_OUTPUT_DIRECTORY, or one of these locations is under the same directory as the executable'
@@ -151,11 +151,19 @@ class LatexConfig(object):
                         )
                     which_initexmf_path = AnyPath(which_initexmf)
                     which_initexmf_resolved = cls._resolve_and_check_executable('initexmf', which_initexmf_path)
-                    cls._miktex_bin = str(which_initexmf_path.parent)
+                    if not which_initexmf_resolved.parent == which_kpsewhich_resolved.parent:
+                        raise LatexConfigError(
+                            f'Environment variable TEXSYSTEM has value "{TEXSYSTEM}" and '
+                            f'environment variable SELFAUTOLOC has value "{SELFAUTOLOC}", '
+                            f'but "initexmf" executable resolved to "{which_initexmf_resolved.as_posix()}" '
+                            f'while "kpsewhich" resolved to "{which_kpsewhich_resolved.as_posix()}"; '
+                            '"initexmf" and "kpsewhich" should be in the same location'
+                        )
+                    cls._miktex_bin = str(which_initexmf_resolved.parent)
                     cls._miktex_initexmf = str(which_initexmf_resolved)
                     cls._miktex_kpsewhich = str(which_kpsewhich_resolved)
                 else:
-                    cls._texlive_bin = str(which_kpsewhich_path.parent)
+                    cls._texlive_bin = str(which_kpsewhich_resolved.parent)
                     cls._texlive_kpsewhich = str(which_kpsewhich_resolved)
                 cls._did_init_tex_paths = True
                 return
@@ -163,7 +171,12 @@ class LatexConfig(object):
                 f'Environment variable SELFAUTOLOC has value "{SELFAUTOLOC}", '
                 'but a "kpsewhich" executable was not found at that location'
             )
-        if TEXSYSTEM and TEXSYSTEM.lower() == 'miktex':
+        if TEXSYSTEM:
+            if TEXSYSTEM.lower() != 'miktex':
+                raise LatexConfigError(
+                    f'Environment variable TEXSYSTEM has unsupported value "{TEXSYSTEM}" '
+                    'while environment variable SELFAUTOLOC is not set'
+                )
             # Unlike the TeX Live case, there isn't a good way deal with the
             # possibility of multiple installations, so just use
             # `shutil.which()` without a specified `path`.
@@ -181,7 +194,14 @@ class LatexConfig(object):
                 if which_kpsewhich:
                     which_kpsewhich_path = AnyPath(which_kpsewhich)
                     which_kpsewhich_resolved = cls._resolve_and_check_executable('kpsewhich', which_kpsewhich_path)
-                    cls._miktex_bin = str(which_initexmf_path.parent)
+                    if not which_initexmf_resolved.parent == which_kpsewhich_resolved.parent:
+                        raise LatexConfigError(
+                            f'Environment variable TEXSYSTEM has value "{TEXSYSTEM}", '
+                            f'but "initexmf" executable from PATH resolved to "{which_initexmf_resolved.as_posix()}" '
+                            f'while "kpsewhich" resolved to "{which_kpsewhich_resolved.as_posix()}"; '
+                            '"initexmf" and "kpsewhich" should be in the same location'
+                        )
+                    cls._miktex_bin = str(which_initexmf_resolved.parent)
                     cls._miktex_initexmf = str(which_initexmf_resolved)
                     cls._miktex_kpsewhich = str(which_kpsewhich_resolved)
                     cls._did_init_tex_paths = True
@@ -191,8 +211,8 @@ class LatexConfig(object):
                 'but a MiKTeX "initexmf" executable with accompanying "kpsewhich" was not found on PATH'
             )
         raise LatexConfigError(
-            'Expected environment variables SELFAUTOLOC and/or TEXSYSTEM were not found or had invalid values, '
-            'so "kpsewhich" executable and/or MiKTeX "initexmf" executable could not be found'
+            'Expected environment variables SELFAUTOLOC and/or TEXSYSTEM were not found, '
+            'so the correct "kpsewhich" executable and/or MiKTeX "initexmf" executable could not be located'
         )
 
     # Locations of TeX executables must be returned as strings, not as
@@ -416,6 +436,8 @@ class LatexConfig(object):
         return self._can_write_anywhere
 
     _prohibited_write_file_extensions: set[str]
+    # Microsoft default PATHEXT and kpathsea default fallback PATHEXT are
+    # slightly different, so use a union of the two.
     # https://learn.microsoft.com/en-us/windows-server/administration/windows-commands/start
     _microsoft_default_pathext = '.COM;.EXE;.BAT;.CMD;.VBS;.VBE;.JS;.JSE;.WSF;.WSH;.MSC'
     # https://tug.org/svn/texlive/trunk/Build/source/texk/kpathsea/progname.c?revision=57915&view=markup#l415
@@ -471,12 +493,13 @@ class LatexConfig(object):
             self._init_shell_escape_settings()
         return self._can_restricted_shell_escape
 
-    _var_cache: dict[str, str | None] = {}
+
+    _var_str_none_cache: dict[str, str | None] = {}
 
     @property
     def TEXMFHOME(self) -> str | None:
         try:
-            value = self._var_cache['TEXMFHOME']
+            return self._var_str_none_cache['TEXMFHOME']
         except KeyError:
             if self.texlive_kpsewhich:
                 value = self._get_texlive_var_value('TEXMFHOME')
@@ -484,44 +507,50 @@ class LatexConfig(object):
                 value = self._get_miktex_config_value('TEXMFHOME')
             else:
                 raise TypeError
-            self._var_cache['TEXMFHOME'] = value
-        return value
+            self._var_str_none_cache['TEXMFHOME'] = value
+            return value
 
     @property
     def TEXMFOUTPUT(self) -> str | None:
         try:
-            value = self._var_cache['TEXMFOUTPUT']
+            return self._var_str_none_cache['TEXMFOUTPUT']
         except KeyError:
             value = os.getenv('TEXMFOUTPUT')
             if value is None and self.texlive_kpsewhich:
                 # TeX Live allows `TEXMFOUTPUT` to be set in `texmf.cnf`
                 value = self._get_texlive_var_value('TEXMFOUTPUT')
-            self._var_cache['TEXMFOUTPUT'] = value
-        return value
+            self._var_str_none_cache['TEXMFOUTPUT'] = value
+            return value
 
     @property
     def TEXMF_OUTPUT_DIRECTORY(self) -> str | None:
         try:
-            value = self._var_cache['TEXMF_OUTPUT_DIRECTORY']
+            return self._var_str_none_cache['TEXMF_OUTPUT_DIRECTORY']
         except KeyError:
             value = os.getenv('TEXMF_OUTPUT_DIRECTORY')
-            self._var_cache['TEXMF_OUTPUT_DIRECTORY'] = value
-        return value
+            self._var_str_none_cache['TEXMF_OUTPUT_DIRECTORY'] = value
+            return value
+
+    _var_set_cache: dict[str, set[str]] = {}
 
     @property
     def restricted_shell_escape_commands(self) -> set[str]:
-        commands = set()
-        if self.texlive_kpsewhich:
-            value = self._get_texlive_var_value('shell_escape_commands')
-            if value is not None:
-                commands.update(value.split(','))
+        try:
+            return self._var_set_cache['restricted_shell_escape_commands']
+        except KeyError:
+            commands = set()
+            if self.texlive_kpsewhich:
+                value = self._get_texlive_var_value('shell_escape_commands')
+                if value is not None:
+                    commands.update(value.split(','))
+            elif self.miktex_initexmf:
+                value = self._get_miktex_config_value('[Core]AllowedShellCommands[]')
+                if value is not None:
+                    commands.update(value.split(';'))
+            else:
+                raise TypeError
+            self._var_set_cache['restricted_shell_escape_commands'] = commands
             return commands
-        if self.miktex_initexmf:
-            value = self._get_miktex_config_value('[Core]AllowedShellCommands[]')
-            if value is not None:
-                commands.update(value.split(';'))
-            return commands
-        raise TypeError
 
 
 
