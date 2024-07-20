@@ -104,11 +104,25 @@ class BaseRestrictedPath(type(AnyPath())):
 
     # Default security is based on TeX configuration.  Subclasses can override
     # this, but should typically only do so to increase security to maximum.
-    _tex_can_read_anywhere = latex_config.can_read_anywhere
-    _tex_can_read_dotfiles = latex_config.can_read_dotfiles
-    _tex_can_write_anywhere = latex_config.can_write_anywhere
-    _tex_can_write_dotfiles = latex_config.can_write_dotfiles
-    _tex_prohibited_write_file_extensions = latex_config.prohibited_write_file_extensions
+    @classmethod
+    def tex_can_read_anywhere(cls) -> bool:
+        return latex_config.can_read_anywhere
+
+    @classmethod
+    def tex_can_read_dotfiles(cls) -> bool:
+        return latex_config.can_read_dotfiles
+
+    @classmethod
+    def tex_can_write_anywhere(cls) -> bool:
+        return latex_config.can_write_anywhere
+
+    @classmethod
+    def tex_can_write_dotfiles(cls) -> bool:
+        return latex_config.can_write_dotfiles
+
+    @classmethod
+    def tex_prohibited_write_file_extensions(cls) -> set[str]:
+        return latex_config.prohibited_write_file_extensions
 
     # Caches use `self.cache_key` which includes the class, so that the
     # returned type is correct.  Values describe whether paths are accessible,
@@ -411,7 +425,7 @@ class StringRestrictedPath(BaseRestrictedPath):
         try:
             return self._tex_readable_dir_cache[self.cache_key]
         except KeyError:
-            if self._tex_can_read_anywhere:
+            if self.tex_can_read_anywhere():
                 self._tex_readable_dir_cache[self.cache_key] = (True, None)
             elif '..' in self.parts:
                 self._tex_readable_dir_cache[self.cache_key] = (
@@ -431,7 +445,7 @@ class StringRestrictedPath(BaseRestrictedPath):
         try:
             return self._tex_readable_file_cache[self.cache_key]
         except KeyError:
-            if self._tex_can_read_dotfiles or not self.name.startswith('.'):
+            if self.tex_can_read_dotfiles() or not self.name.startswith('.'):
                 self._tex_readable_file_cache[self.cache_key] = self.parent.tex_readable_dir()
             else:
                 self._tex_readable_file_cache[self.cache_key] = (
@@ -444,7 +458,7 @@ class StringRestrictedPath(BaseRestrictedPath):
         try:
             return self._tex_writable_dir_cache[self.cache_key]
         except KeyError:
-            if self._tex_can_write_anywhere:
+            if self.tex_can_write_anywhere():
                 self._tex_writable_dir_cache[self.cache_key] = (True, None)
             elif '..' in self.parts:
                 self._tex_writable_dir_cache[self.cache_key] = (
@@ -465,7 +479,7 @@ class StringRestrictedPath(BaseRestrictedPath):
             return self._tex_writable_file_cache[self.cache_key]
         except KeyError:
             name_lower = self.name.lower()
-            for ext in self._tex_prohibited_write_file_extensions:
+            for ext in self.tex_prohibited_write_file_extensions():
                 if name_lower.endswith(ext):
                     self._tex_writable_file_cache[self.cache_key] = (
                         False,
@@ -473,7 +487,7 @@ class StringRestrictedPath(BaseRestrictedPath):
                     )
                     break
             else:
-                if self._tex_can_write_dotfiles or not self.name.startswith('.'):
+                if self.tex_can_write_dotfiles() or not self.name.startswith('.'):
                     self._tex_writable_file_cache[self.cache_key] = self.parent.tex_writable_dir()
                 else:
                     self._tex_writable_file_cache[self.cache_key] = (
@@ -485,16 +499,34 @@ class StringRestrictedPath(BaseRestrictedPath):
 
 class SafeStringRestrictedPath(StringRestrictedPath):
     __slots__ = ()
-    _tex_can_read_anywhere = False
-    _tex_can_read_dotfiles = False
-    _tex_can_write_anywhere = False
-    _tex_can_write_dotfiles = False
+
+    @classmethod
+    def tex_can_read_anywhere(cls):
+        return False
+
+    @classmethod
+    def tex_can_read_dotfiles(cls):
+        return False
+
+    @classmethod
+    def tex_can_write_anywhere(cls):
+        return False
+
+    @classmethod
+    def tex_can_write_dotfiles(cls):
+        return False
 
 
 class SafeWriteStringRestrictedPath(StringRestrictedPath):
     __slots__ = ()
-    _tex_can_write_anywhere = False
-    _tex_can_write_dotfiles = False
+
+    @classmethod
+    def tex_can_write_anywhere(cls):
+        return False
+
+    @classmethod
+    def tex_can_write_dotfiles(cls):
+        return False
 
 
 
@@ -543,7 +575,7 @@ class ResolvedRestrictedPath(BaseRestrictedPath):
         try:
             return self._tex_readable_dir_cache[self.cache_key]
         except KeyError:
-            if self._tex_can_read_anywhere:
+            if self.tex_can_read_anywhere():
                 self._tex_readable_dir_cache[self.cache_key] = (True, None)
             else:
                 resolved = self.resolve()
@@ -563,7 +595,7 @@ class ResolvedRestrictedPath(BaseRestrictedPath):
             # Must always resolve files in case they are symlinks.  Always use
             # `self.resolve().parent` instead of `self.parent`.
             resolved = self.resolve()
-            if self._tex_can_read_dotfiles or not any(p.name.startswith('.') for p in (self, resolved)):
+            if self.tex_can_read_dotfiles() or not any(p.name.startswith('.') for p in (self, resolved)):
                 self._tex_readable_file_cache[self.cache_key] = resolved.parent.tex_readable_dir()
             else:
                 self._tex_readable_file_cache[self.cache_key] = (
@@ -576,7 +608,7 @@ class ResolvedRestrictedPath(BaseRestrictedPath):
         try:
             return self._tex_writable_dir_cache[self.cache_key]
         except KeyError:
-            if self._tex_can_write_anywhere:
+            if self.tex_can_write_anywhere():
                 self._tex_writable_dir_cache[self.cache_key] = (True, None)
             else:
                 resolved = self.resolve()
@@ -596,7 +628,7 @@ class ResolvedRestrictedPath(BaseRestrictedPath):
             resolved = self.resolve()
             name_lower = self.name.lower()
             resolved_name_lower = resolved.name.lower()
-            for ext in self._tex_prohibited_write_file_extensions:
+            for ext in self.tex_prohibited_write_file_extensions():
                 if name_lower.endswith(ext) or resolved_name_lower.endswith(ext):
                     self._tex_writable_file_cache[self.cache_key] = (
                         False,
@@ -604,7 +636,7 @@ class ResolvedRestrictedPath(BaseRestrictedPath):
                     )
                     break
             else:
-                if self._tex_can_write_dotfiles or not any(p.name.startswith('.') for p in (self, resolved)):
+                if self.tex_can_write_dotfiles() or not any(p.name.startswith('.') for p in (self, resolved)):
                     self._tex_writable_file_cache[self.cache_key] = resolved.parent.tex_writable_dir()
                 else:
                     self._tex_writable_file_cache[self.cache_key] = (
@@ -616,13 +648,31 @@ class ResolvedRestrictedPath(BaseRestrictedPath):
 
 class SafeResolvedRestrictedPath(ResolvedRestrictedPath):
     __slots__ = ()
-    _tex_can_read_anywhere = False
-    _tex_can_read_dotfiles = False
-    _tex_can_write_anywhere = False
-    _tex_can_write_dotfiles = False
+
+    @classmethod
+    def tex_can_read_anywhere(cls):
+        return False
+
+    @classmethod
+    def tex_can_read_dotfiles(cls):
+        return False
+
+    @classmethod
+    def tex_can_write_anywhere(cls):
+        return False
+
+    @classmethod
+    def tex_can_write_dotfiles(cls):
+        return False
 
 
 class SafeWriteResolvedRestrictedPath(ResolvedRestrictedPath):
     __slots__ = ()
-    _tex_can_write_anywhere = False
-    _tex_can_write_dotfiles = False
+
+    @classmethod
+    def tex_can_write_anywhere(cls):
+        return False
+
+    @classmethod
+    def tex_can_write_dotfiles(cls):
+        return False
