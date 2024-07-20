@@ -92,7 +92,7 @@ LaTeX configuration and related environment variables.
   properties describe whether dotfiles (files with names beginning with `.`)
   can be read/written.  The `*anywhere` properties describe whether files
   anywhere in the file system can be read/written, or only those under the
-  current working directory, `$TEXMF_OUTPUT`, and `$TEXMF_OUTPUT_DIRECTORY`.
+  current working directory, `$TEXMFOUTPUT`, and `$TEXMF_OUTPUT_DIRECTORY`.
 
 * `can_restricted_shell_escape: bool`:  This describes whether restricted
   shell escape is possible.  It is true when restricted shell escape is
@@ -151,7 +151,7 @@ TeX limits file system access.  The file system security settings for TeX Live
 (`[Core]AllowUnsafeInputFiles` and `[Core]AllowUnsafeOutputFiles` in
 `miktex.ini`) determine whether dotfiles can be read/written and whether files
 anywhere in the file system can be read/written, or only those under the
-current working directory, `$TEXMF_OUTPUT`, and `$TEXMF_OUTPUT_DIRECTORY`.
+current working directory, `$TEXMFOUTPUT`, and `$TEXMF_OUTPUT_DIRECTORY`.
 
 The `latexrestricted` package provides subclasses of Python's
 [`pathlib.Path`](https://docs.python.org/3/library/pathlib.html) that respect
@@ -170,11 +170,11 @@ from latexrestricted import <RestrictedPathClass>
 * `BaseRestrictedPath`:  This is the base class for `RestrictedPath` classes.
   It cannot be used directly.  Subclasses define methods
   `.tex_readable_dir()`, `.tex_readable_file()`, `.tex_writable_dir()`, and
-  `.tex_writable_file()` that determine whether a given path is readable/
-  writable.  Most methods for opening, reading, writing, replacing, and
-  deleting files as well as methods for creating and deleting directories are
-  supported.  Methods related to modifying file permissions and creating links
-  are not supported.  Unsupported methods raise `NotImplementedError`.
+  `.tex_writable_file()` that determine whether a given path is
+  readable/writable.  Most methods for opening, reading, writing, replacing,
+  and deleting files as well as methods for creating and deleting directories
+  are supported.  Methods related to modifying file permissions and creating
+  links are not supported.  Unsupported methods raise `NotImplementedError`.
 
 * `StringRestrictedPath`:  This follows the approach taken in TeX's file
   system security.  TeX configuration determines whether dotfiles are
