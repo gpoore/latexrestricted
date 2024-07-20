@@ -10,6 +10,7 @@
 
 from __future__ import annotations
 
+from .version import __version__, __version_info__
 from .err import *
 from ._latex_config import latex_config
 from ._restricted_pathlib import (
