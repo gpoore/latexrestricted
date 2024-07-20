@@ -539,9 +539,7 @@ class LatexConfig(object):
             return self._var_set_cache['restricted_shell_escape_commands']
         except KeyError:
             commands = set()
-            if not self.can_restricted_shell_escape:
-                pass
-            elif self.texlive_kpsewhich:
+            if self.texlive_kpsewhich:
                 value = self._get_texlive_var_value('shell_escape_commands')
                 if value is not None:
                     commands.update(value.split(','))

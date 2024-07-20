@@ -94,6 +94,12 @@ LaTeX configuration and related environment variables.
   anywhere in the file system can be read/written, or only those under the
   current working directory, `$TEXMF_OUTPUT`, and `$TEXMF_OUTPUT_DIRECTORY`.
 
+* `can_restricted_shell_escape: bool`:  This describes whether restricted
+  shell escape is possible.  It is true when restricted shell escape is
+  enabled and also when full shell escape is enabled.  It is based on TeX
+  Live's `shell_escape` in `texmf.cnf` and MiKTeX's `[Core]ShellCommandMode`
+  in `miktex.ini`.
+
 * `prohibited_write_file_extensions: set[str]`:  File extensions that cannot
   be used in writing files under Windows (including Cygwin).  All file
   extensions are lower case with a leading period (for example, `.exe`).
@@ -112,6 +118,12 @@ LaTeX configuration and related environment variables.
 * `restricted_shell_escape_commands: set[str]`:  Permitted restricted shell
   escape executables.  Obtained from TeX Live's `shell_escape_commands` in
   `texmf.cnf` or MiKTeX's `[Core]AllowedShellCommands[]` in `miktex.ini`.
+
+  Note that this will contain permitted restricted shell escape executables
+  even when shell escape is completely disabled; it cannot be used to
+  determine whether restricted shell escape is permitted.  See
+  `can_restricted_shell_escape` to determine whether restricted shell escape
+  is permitted.
 
 `latex_config` methods:
 
