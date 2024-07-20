@@ -25,12 +25,7 @@ _always_approved_executables = set([
     'initexmf',
 ])
 
-_prohibited_path_roots: set[AnyPath] = set([AnyPath(latex_config.tex_cwd)])
-for var in (latex_config.TEXMF_OUTPUT_DIRECTORY, latex_config.TEXMFOUTPUT):
-    if var:
-        var_path = AnyPath(var)
-        _prohibited_path_roots.add(var_path)
-        _prohibited_path_roots.add(var_path.resolve())
+_cache: dict[str, set[AnyPath]] = {}
 
 
 
@@ -105,9 +100,19 @@ def restricted_run(args: list[str], allow_restricted_executables: bool = False) 
             'but *.bat and *.cmd are not permitted'
         )
 
+    try:
+        prohibited_path_roots = _cache['prohibited_path_roots']
+    except KeyError:
+        _cache['prohibited_path_roots'] = set([AnyPath(latex_config.tex_cwd)])
+        for var in (latex_config.TEXMF_OUTPUT_DIRECTORY, latex_config.TEXMFOUTPUT):
+            if var:
+                var_path = AnyPath(var)
+                _cache['prohibited_path_roots'].update([var_path, var_path.resolve()])
+        prohibited_path_roots = _cache['prohibited_path_roots']
+
     if any(e.is_relative_to(p) or p.is_relative_to(e)
            for e in set([which_executable_path.parent, which_executable_resolved.parent])
-           for p in _prohibited_path_roots):
+           for p in prohibited_path_roots):
         raise ExecutablePathSecurityError(
             f'Executable "{executable}" is located under the current directory, $TEXMFOUTPUT, '
             'or $TEXMF_OUTPUT_DIRECTORY, or one of these locations is under the same directory '
