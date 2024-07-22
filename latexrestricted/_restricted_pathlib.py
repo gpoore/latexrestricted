@@ -100,7 +100,9 @@ class BaseRestrictedPath(type(AnyPath())):
     # path security analysis using resolved paths.  Otherwise, the file system
     # (symlinks) could be modified after security analysis but before a path
     # is used, so that the security analysis is invalid.
-    _access_file_system_with_resolved_paths: bool
+    @classmethod
+    def access_file_system_with_resolved_paths(cls) -> bool:
+        raise NotImplementedError
 
     # Default security is based on TeX configuration.  Subclasses can override
     # this, but should typically only do so to increase security to maximum.
@@ -176,7 +178,7 @@ class BaseRestrictedPath(type(AnyPath())):
             is_writable, reason = self.tex_writable_dir()
             if not is_writable:
                 raise PathSecurityError(f'Cannot create directory "{self.as_posix()}":  {reason}')
-            if self._access_file_system_with_resolved_paths and not self.is_resolved():
+            if self.access_file_system_with_resolved_paths() and not self.is_resolved():
                 return super(BaseRestrictedPath, self.resolve()).mkdir(*args, **kwargs)
             return super().mkdir(*args, **kwargs)
 
@@ -192,7 +194,7 @@ class BaseRestrictedPath(type(AnyPath())):
                     raise PathSecurityError(f'Cannot write file "{self.as_posix()}":  {reason}')
             else:
                 raise NotImplementedError
-            if self._access_file_system_with_resolved_paths and not self.is_resolved():
+            if self.access_file_system_with_resolved_paths() and not self.is_resolved():
                 return super(BaseRestrictedPath, self.resolve()).open(mode=mode, *args, **kwargs)
             return super().open(mode=mode, *args, **kwargs)
 
@@ -201,7 +203,7 @@ class BaseRestrictedPath(type(AnyPath())):
             is_readable, reason = self.tex_readable_file()
             if not is_readable:
                 raise PathSecurityError(f'Cannot read file "{self.as_posix()}":  {reason}')
-            if self._access_file_system_with_resolved_paths and not self.is_resolved():
+            if self.access_file_system_with_resolved_paths() and not self.is_resolved():
                 return super(BaseRestrictedPath, self.resolve()).read_bytes(*args, **kwargs)
             return super().read_bytes(*args, **kwargs)
 
@@ -210,7 +212,7 @@ class BaseRestrictedPath(type(AnyPath())):
             is_readable, reason = self.tex_readable_file()
             if not is_readable:
                 raise PathSecurityError(f'Cannot read file "{self.as_posix()}":  {reason}')
-            if self._access_file_system_with_resolved_paths and not self.is_resolved():
+            if self.access_file_system_with_resolved_paths() and not self.is_resolved():
                 return super(BaseRestrictedPath, self.resolve()).read_text(*args, **kwargs)
             return super().read_text(*args, **kwargs)
 
@@ -222,7 +224,7 @@ class BaseRestrictedPath(type(AnyPath())):
             target_is_writable, target_reason = target.tex_writable_file()
             if not target_is_writable:
                 raise PathSecurityError(f'Cannot create renamed file "{target.as_posix()}":  {target_reason}')
-            if self._access_file_system_with_resolved_paths and not (self.is_resolved() and target.is_resolved()):
+            if self.access_file_system_with_resolved_paths() and not (self.is_resolved() and target.is_resolved()):
                 return super(BaseRestrictedPath, self.resolve()).rename(target.resolve())
             return super().rename(target)
 
@@ -234,7 +236,7 @@ class BaseRestrictedPath(type(AnyPath())):
             target_is_writable, target_reason = target.tex_writable_file()
             if not target_is_writable:
                 raise PathSecurityError(f'Cannot create replacement file "{target.as_posix()}":  {target_reason}')
-            if self._access_file_system_with_resolved_paths and not (self.is_resolved() and target.is_resolved()):
+            if self.access_file_system_with_resolved_paths() and not (self.is_resolved() and target.is_resolved()):
                 return super(BaseRestrictedPath, self.resolve()).replace(target.resolve())
             return super().replace(target)
 
@@ -243,7 +245,7 @@ class BaseRestrictedPath(type(AnyPath())):
             is_writable, reason = self.tex_writable_dir()
             if not is_writable:
                 raise PathSecurityError(f'Cannot delete directory "{self.as_posix()}":  {reason}')
-            if self._access_file_system_with_resolved_paths and not self.is_resolved():
+            if self.access_file_system_with_resolved_paths() and not self.is_resolved():
                 return super(BaseRestrictedPath, self.resolve()).rmdir()
             return super().rmdir()
 
@@ -258,7 +260,7 @@ class BaseRestrictedPath(type(AnyPath())):
             is_writable, reason = self.tex_writable_file()
             if not is_writable:
                 raise PathSecurityError(f'Cannot create file "{self.as_posix()}":  {reason}')
-            if self._access_file_system_with_resolved_paths and not self.is_resolved():
+            if self.access_file_system_with_resolved_paths() and not self.is_resolved():
                 return super(BaseRestrictedPath, self.resolve()).touch(*args, **kwargs)
             return super().touch(*args, **kwargs)
 
@@ -267,7 +269,7 @@ class BaseRestrictedPath(type(AnyPath())):
             is_writable, reason = self.tex_writable_file()
             if not is_writable:
                 raise PathSecurityError(f'Cannot delete file "{self.as_posix()}":  {reason}')
-            if self._access_file_system_with_resolved_paths and not self.is_resolved():
+            if self.access_file_system_with_resolved_paths() and not self.is_resolved():
                 return super(BaseRestrictedPath, self.resolve()).unlink(*args, **kwargs)
             return super().unlink(*args, **kwargs)
 
@@ -276,7 +278,7 @@ class BaseRestrictedPath(type(AnyPath())):
             is_writable, reason = self.tex_writable_file()
             if not is_writable:
                 raise PathSecurityError(f'Cannot write file "{self.as_posix()}":  {reason}')
-            if self._access_file_system_with_resolved_paths and not self.is_resolved():
+            if self.access_file_system_with_resolved_paths() and not self.is_resolved():
                 return super(BaseRestrictedPath, self.resolve()).write_bytes(*args, **kwargs)
             return super().write_bytes(*args, **kwargs)
 
@@ -285,7 +287,7 @@ class BaseRestrictedPath(type(AnyPath())):
             is_writable, reason = self.tex_writable_file()
             if not is_writable:
                 raise PathSecurityError(f'Cannot write file "{self.as_posix()}":  {reason}')
-            if self._access_file_system_with_resolved_paths and not self.is_resolved():
+            if self.access_file_system_with_resolved_paths() and not self.is_resolved():
                 return super(BaseRestrictedPath, self.resolve()).write_text(*args, **kwargs)
             return super().write_text(*args, **kwargs)
 
@@ -430,7 +432,9 @@ class StringRestrictedPath(BaseRestrictedPath):
 
     __slots__ = ()
 
-    _access_file_system_with_resolved_paths = False
+    @classmethod
+    def access_file_system_with_resolved_paths(cls):
+        return False
 
     def tex_readable_dir(self) -> tuple[Literal[True], None] | tuple[Literal[False], str]:
         try:
@@ -580,7 +584,9 @@ class ResolvedRestrictedPath(BaseRestrictedPath):
 
     __slots__ = ()
 
-    _access_file_system_with_resolved_paths = True
+    @classmethod
+    def access_file_system_with_resolved_paths(cls):
+        return True
 
     def tex_readable_dir(self) -> tuple[Literal[True], None] | tuple[Literal[False], str]:
         try:
