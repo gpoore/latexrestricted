@@ -53,12 +53,18 @@ class AnyPath(type(pathlib.Path())):
     # same location after it has been approved for reading/writing.
     _resolved_set: set[tuple[type[Self], Self]] = set()
     _resolve_cache: dict[tuple[type[Self], Self], Self] = {}
+    _resolve_str_path_cache: dict[str, str] = {}
 
     def resolve(self) -> Self:
         try:
             return self._resolve_cache[self.cache_key]
         except KeyError:
-            resolved = super().resolve()
+            try:
+                resolved = type(self)(self._resolve_str_path_cache[str(self)])
+            except KeyError:
+                resolved = super().resolve()
+                self._resolve_str_path_cache[str(self)] = str(resolved)
+                self._resolve_str_path_cache[str(resolved)] = str(resolved)
             self._resolved_set.add(resolved.cache_key)
             self._resolve_cache[self.cache_key] = resolved
             self._resolve_cache[resolved.cache_key] = resolved
