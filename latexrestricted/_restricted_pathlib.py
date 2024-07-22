@@ -124,6 +124,17 @@ class BaseRestrictedPath(type(AnyPath())):
     def tex_prohibited_write_file_extensions(cls) -> set[str]:
         return latex_config.prohibited_write_file_extensions
 
+    # This determines whether files with extensions in PATHEXT can be written
+    # under Windows (including Cygwin).  Subclasses should only override this
+    # when absolutely necessary.  If this is disabled, then other measures
+    # should be taken to provide some compensating security.  For example,
+    # prohibit writing files with these extensions in the TeX working
+    # directory and possibly other locations where executables are likely to
+    # be run from a shell.
+    @classmethod
+    def enforce_tex_prohibited_write_file_extensions(cls) -> bool:
+        return True
+
     # Caches use `self.cache_key` which includes the class, so that the
     # returned type is correct.  Values describe whether paths are accessible,
     # and if not, why:
@@ -478,22 +489,22 @@ class StringRestrictedPath(BaseRestrictedPath):
         try:
             return self._tex_writable_file_cache[self.cache_key]
         except KeyError:
-            name_lower = self.name.lower()
-            for ext in self.tex_prohibited_write_file_extensions():
-                if name_lower.endswith(ext):
-                    self._tex_writable_file_cache[self.cache_key] = (
-                        False,
-                        f'security settings prevent writing files with extension "{ext}"'
-                    )
-                    break
+            if self.enforce_tex_prohibited_write_file_extensions():
+                name_lower = self.name.lower()
+                for ext in self.tex_prohibited_write_file_extensions():
+                    if name_lower.endswith(ext):
+                        self._tex_writable_file_cache[self.cache_key] = (
+                            False,
+                            f'security settings prevent writing files with extension "{ext}"'
+                        )
+                        return self._tex_writable_file_cache[self.cache_key]
+            if self.tex_can_write_dotfiles() or not self.name.startswith('.'):
+                self._tex_writable_file_cache[self.cache_key] = self.parent.tex_writable_dir()
             else:
-                if self.tex_can_write_dotfiles() or not self.name.startswith('.'):
-                    self._tex_writable_file_cache[self.cache_key] = self.parent.tex_writable_dir()
-                else:
-                    self._tex_writable_file_cache[self.cache_key] = (
-                        False,
-                        'security settings do not permit access to dotfiles'
-                    )
+                self._tex_writable_file_cache[self.cache_key] = (
+                    False,
+                    'security settings do not permit access to dotfiles'
+                )
             return self._tex_writable_file_cache[self.cache_key]
 
 
@@ -626,23 +637,23 @@ class ResolvedRestrictedPath(BaseRestrictedPath):
             return self._tex_writable_file_cache[self.cache_key]
         except KeyError:
             resolved = self.resolve()
-            name_lower = self.name.lower()
-            resolved_name_lower = resolved.name.lower()
-            for ext in self.tex_prohibited_write_file_extensions():
-                if name_lower.endswith(ext) or resolved_name_lower.endswith(ext):
-                    self._tex_writable_file_cache[self.cache_key] = (
-                        False,
-                        f'security settings prevent writing files with extension "{ext}"'
-                    )
-                    break
+            if self.enforce_tex_prohibited_write_file_extensions():
+                name_lower = self.name.lower()
+                resolved_name_lower = resolved.name.lower()
+                for ext in self.tex_prohibited_write_file_extensions():
+                    if name_lower.endswith(ext) or resolved_name_lower.endswith(ext):
+                        self._tex_writable_file_cache[self.cache_key] = (
+                            False,
+                            f'security settings prevent writing files with extension "{ext}"'
+                        )
+                        return self._tex_writable_file_cache[self.cache_key]
+            if self.tex_can_write_dotfiles() or not any(p.name.startswith('.') for p in (self, resolved)):
+                self._tex_writable_file_cache[self.cache_key] = resolved.parent.tex_writable_dir()
             else:
-                if self.tex_can_write_dotfiles() or not any(p.name.startswith('.') for p in (self, resolved)):
-                    self._tex_writable_file_cache[self.cache_key] = resolved.parent.tex_writable_dir()
-                else:
-                    self._tex_writable_file_cache[self.cache_key] = (
-                        False,
-                        'security settings do not permit access to dotfiles'
-                    )
+                self._tex_writable_file_cache[self.cache_key] = (
+                    False,
+                    'security settings do not permit access to dotfiles'
+                )
             return self._tex_writable_file_cache[self.cache_key]
 
 
