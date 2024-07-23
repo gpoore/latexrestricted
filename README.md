@@ -100,11 +100,13 @@ LaTeX configuration and related environment variables.
   Live's `shell_escape` in `texmf.cnf` and MiKTeX's `[Core]ShellCommandMode`
   in `miktex.ini`.
 
-* `prohibited_write_file_extensions: set[str]`:  File extensions that cannot
-  be used in writing files under Windows (including Cygwin).  All file
-  extensions are lower case with a leading period (for example, `.exe`).
-  These are determined from the `PATHEXT` environment variable, or use a
-  default fallback if `PATHEXT` is not defined or when under Cygwin.
+* `prohibited_write_file_extensions: frozenset[str] | None`:  Under Windows
+  (including Cygwin), this is a frozen set of file extensions that cannot be
+  used in writing files.  Under other operating systems, this is `None`.
+
+  All file extensions are lower case with a leading period (for example,
+  `.exe`).  These are determined from the `PATHEXT` environment variable, or
+  use a default fallback if `PATHEXT` is not defined or when under Cygwin.
 
 * `TEXMFHOME: str | None`:  Value of `TEXMFHOME` obtained from `kpsewhich`
   or `initexmf`.

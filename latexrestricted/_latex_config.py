@@ -435,20 +435,20 @@ class LatexConfig(object):
             self._init_write_settings()
         return self._can_write_anywhere
 
-    _prohibited_write_file_extensions: set[str]
+    _prohibited_write_file_extensions: frozenset[str] | None
     # Microsoft default PATHEXT and kpathsea default fallback PATHEXT are
     # slightly different, so use a union of the two.
     # https://learn.microsoft.com/en-us/windows-server/administration/windows-commands/start
     _microsoft_default_pathext = '.COM;.EXE;.BAT;.CMD;.VBS;.VBE;.JS;.JSE;.WSF;.WSH;.MSC'
     # https://tug.org/svn/texlive/trunk/Build/source/texk/kpathsea/progname.c?revision=57915&view=markup#l415
     _kpathsea_default_pathext = '.com;.exe;.bat;.cmd;.vbs;.vbe;.js;.jse;.wsf;.wsh;.ws;.tcl;.py;.pyw'
-    _fallback_prohibited_write_file_extensions: set[str] = set(
+    _fallback_prohibited_write_file_extensions = frozenset(
         ';'.join([_microsoft_default_pathext, _kpathsea_default_pathext]).lower().split(';')
     )
     if platform.system() == 'Windows':
         _pathext = os.getenv('PATHEXT')
         if _pathext:
-            _prohibited_write_file_extensions = set(_pathext.lower().split(os.pathsep))
+            _prohibited_write_file_extensions = frozenset(_pathext.lower().split(os.pathsep))
         else:
             _prohibited_write_file_extensions = _fallback_prohibited_write_file_extensions
     elif platform.system().lower().startswith('cygwin'):
@@ -456,10 +456,10 @@ class LatexConfig(object):
         # https://tug.org/svn/texlive/trunk/Build/source/texk/kpathsea/progname.c?revision=57915&view=markup#l424
         _prohibited_write_file_extensions = _fallback_prohibited_write_file_extensions
     else:
-        _prohibited_write_file_extensions = set()
+        _prohibited_write_file_extensions = None
 
     @property
-    def prohibited_write_file_extensions(self) -> set[str]:
+    def prohibited_write_file_extensions(self) -> frozenset[str] | None:
         return self._prohibited_write_file_extensions
 
     _did_init_shell_escape_settings: bool = False
