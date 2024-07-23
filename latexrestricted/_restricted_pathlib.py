@@ -59,11 +59,10 @@ class BaseRestrictedPath(type(AnyPath())):
 
       * Most methods for opening, reading, writing, replacing, and deleting
         files as well as methods for creating and deleting directories are
-        redefined to depend on the new methods `.tex_readable_dir()`,
-        `.tex_readable_file()`, `.tex_writable_dir()`, and
-        `.tex_writable_file()`.  These new methods all raise
-        `NotImplementedError` in the base class; they must be implemented by
-        subclasses.
+        redefined to depend on the new methods `.readable_dir()`,
+        `.readable_file()`, `.writable_dir()`, and `.writable_file()`.  These
+        new methods all raise `NotImplementedError` in the base class; they
+        must be implemented by subclasses.
 
       * All other methods for modifying the file system are redefined to raise
         `NotImplementedError`.  Most of these methods relate to file
@@ -107,55 +106,44 @@ class BaseRestrictedPath(type(AnyPath())):
     # Default security is based on TeX configuration.  Subclasses can override
     # this, but should typically only do so to increase security to maximum.
     @classmethod
-    def tex_can_read_anywhere(cls) -> bool:
+    def can_read_anywhere(cls) -> bool:
         return latex_config.can_read_anywhere
 
     @classmethod
-    def tex_can_read_dotfiles(cls) -> bool:
+    def can_read_dotfiles(cls) -> bool:
         return latex_config.can_read_dotfiles
 
     @classmethod
-    def tex_can_write_anywhere(cls) -> bool:
+    def can_write_anywhere(cls) -> bool:
         return latex_config.can_write_anywhere
 
     @classmethod
-    def tex_can_write_dotfiles(cls) -> bool:
+    def can_write_dotfiles(cls) -> bool:
         return latex_config.can_write_dotfiles
 
     @classmethod
-    def tex_prohibited_write_file_extensions(cls) -> set[str]:
+    def prohibited_write_file_extensions(cls) -> frozenset[str] | None:
         return latex_config.prohibited_write_file_extensions
-
-    # This determines whether files with extensions in PATHEXT can be written
-    # under Windows (including Cygwin).  Subclasses should only override this
-    # when absolutely necessary.  If this is disabled, then other measures
-    # should be taken to provide some compensating security.  For example,
-    # prohibit writing files with these extensions in the TeX working
-    # directory and possibly other locations where executables are likely to
-    # be run from a shell.
-    @classmethod
-    def enforce_tex_prohibited_write_file_extensions(cls) -> bool:
-        return True
 
     # Caches use `self.cache_key` which includes the class, so that the
     # returned type is correct.  Values describe whether paths are accessible,
     # and if not, why:
     #     (is_accessible: bool, reason_not_accessible: str | None)
-    _tex_readable_dir_cache:  dict[tuple[type[Self], Self], tuple[Literal[True], None] | tuple[Literal[False], str]] = {}
-    _tex_readable_file_cache: dict[tuple[type[Self], Self], tuple[Literal[True], None] | tuple[Literal[False], str]] = {}
-    _tex_writable_dir_cache:  dict[tuple[type[Self], Self], tuple[Literal[True], None] | tuple[Literal[False], str]] = {}
-    _tex_writable_file_cache: dict[tuple[type[Self], Self], tuple[Literal[True], None] | tuple[Literal[False], str]] = {}
+    _readable_dir_cache:  dict[tuple[type[Self], Self], tuple[Literal[True], None] | tuple[Literal[False], str]] = {}
+    _readable_file_cache: dict[tuple[type[Self], Self], tuple[Literal[True], None] | tuple[Literal[False], str]] = {}
+    _writable_dir_cache:  dict[tuple[type[Self], Self], tuple[Literal[True], None] | tuple[Literal[False], str]] = {}
+    _writable_file_cache: dict[tuple[type[Self], Self], tuple[Literal[True], None] | tuple[Literal[False], str]] = {}
 
-    def tex_readable_dir(self) -> tuple[Literal[True], None] | tuple[Literal[False], str]:
+    def readable_dir(self) -> tuple[Literal[True], None] | tuple[Literal[False], str]:
         raise NotImplementedError
 
-    def tex_readable_file(self) -> tuple[Literal[True], None] | tuple[Literal[False], str]:
+    def readable_file(self) -> tuple[Literal[True], None] | tuple[Literal[False], str]:
         raise NotImplementedError
 
-    def tex_writable_dir(self) -> tuple[Literal[True], None] | tuple[Literal[False], str]:
+    def writable_dir(self) -> tuple[Literal[True], None] | tuple[Literal[False], str]:
         raise NotImplementedError
 
-    def tex_writable_file(self) -> tuple[Literal[True], None] | tuple[Literal[False], str]:
+    def writable_file(self) -> tuple[Literal[True], None] | tuple[Literal[False], str]:
         raise NotImplementedError
 
 
@@ -175,7 +163,7 @@ class BaseRestrictedPath(type(AnyPath())):
 
     def mkdir(self, *args, **kwargs):
         with _cd_tex_cwd:
-            is_writable, reason = self.tex_writable_dir()
+            is_writable, reason = self.writable_dir()
             if not is_writable:
                 raise PathSecurityError(f'Cannot create directory "{self.as_posix()}":  {reason}')
             if self.access_file_system_with_resolved_paths() and not self.is_resolved():
@@ -185,11 +173,11 @@ class BaseRestrictedPath(type(AnyPath())):
     def open(self, mode: str = 'r', *args, **kwargs):
         with _cd_tex_cwd:
             if 'r' in mode:
-                is_readable, reason = self.tex_readable_file()
+                is_readable, reason = self.readable_file()
                 if not is_readable:
                     raise PathSecurityError(f'Cannot read file "{self.as_posix()}":  {reason}')
             elif any(char in mode for char in 'wxa'):
-                is_writable, reason = self.tex_writable_file()
+                is_writable, reason = self.writable_file()
                 if not is_writable:
                     raise PathSecurityError(f'Cannot write file "{self.as_posix()}":  {reason}')
             else:
@@ -200,7 +188,7 @@ class BaseRestrictedPath(type(AnyPath())):
 
     def read_bytes(self, *args, **kwargs):
         with _cd_tex_cwd:
-            is_readable, reason = self.tex_readable_file()
+            is_readable, reason = self.readable_file()
             if not is_readable:
                 raise PathSecurityError(f'Cannot read file "{self.as_posix()}":  {reason}')
             if self.access_file_system_with_resolved_paths() and not self.is_resolved():
@@ -209,7 +197,7 @@ class BaseRestrictedPath(type(AnyPath())):
 
     def read_text(self, *args, **kwargs) -> str:
         with _cd_tex_cwd:
-            is_readable, reason = self.tex_readable_file()
+            is_readable, reason = self.readable_file()
             if not is_readable:
                 raise PathSecurityError(f'Cannot read file "{self.as_posix()}":  {reason}')
             if self.access_file_system_with_resolved_paths() and not self.is_resolved():
@@ -218,10 +206,10 @@ class BaseRestrictedPath(type(AnyPath())):
 
     def rename(self, target: Self):
         with _cd_tex_cwd:
-            is_writable, reason = self.tex_writable_file()
+            is_writable, reason = self.writable_file()
             if not is_writable:
                 raise PathSecurityError(f'Cannot rename file "{self.as_posix()}":  {reason}')
-            target_is_writable, target_reason = target.tex_writable_file()
+            target_is_writable, target_reason = target.writable_file()
             if not target_is_writable:
                 raise PathSecurityError(f'Cannot create renamed file "{target.as_posix()}":  {target_reason}')
             if self.access_file_system_with_resolved_paths() and not (self.is_resolved() and target.is_resolved()):
@@ -230,10 +218,10 @@ class BaseRestrictedPath(type(AnyPath())):
 
     def replace(self, target: Self):
         with _cd_tex_cwd:
-            is_writable, reason = self.tex_writable_file()
+            is_writable, reason = self.writable_file()
             if not is_writable:
                 raise PathSecurityError(f'Cannot replace file "{self.as_posix()}":  {reason}')
-            target_is_writable, target_reason = target.tex_writable_file()
+            target_is_writable, target_reason = target.writable_file()
             if not target_is_writable:
                 raise PathSecurityError(f'Cannot create replacement file "{target.as_posix()}":  {target_reason}')
             if self.access_file_system_with_resolved_paths() and not (self.is_resolved() and target.is_resolved()):
@@ -242,7 +230,7 @@ class BaseRestrictedPath(type(AnyPath())):
 
     def rmdir(self):
         with _cd_tex_cwd:
-            is_writable, reason = self.tex_writable_dir()
+            is_writable, reason = self.writable_dir()
             if not is_writable:
                 raise PathSecurityError(f'Cannot delete directory "{self.as_posix()}":  {reason}')
             if self.access_file_system_with_resolved_paths() and not self.is_resolved():
@@ -257,7 +245,7 @@ class BaseRestrictedPath(type(AnyPath())):
 
     def touch(self, *args, **kwargs):
         with _cd_tex_cwd:
-            is_writable, reason = self.tex_writable_file()
+            is_writable, reason = self.writable_file()
             if not is_writable:
                 raise PathSecurityError(f'Cannot create file "{self.as_posix()}":  {reason}')
             if self.access_file_system_with_resolved_paths() and not self.is_resolved():
@@ -266,7 +254,7 @@ class BaseRestrictedPath(type(AnyPath())):
 
     def unlink(self, *args, **kwargs):
         with _cd_tex_cwd:
-            is_writable, reason = self.tex_writable_file()
+            is_writable, reason = self.writable_file()
             if not is_writable:
                 raise PathSecurityError(f'Cannot delete file "{self.as_posix()}":  {reason}')
             if self.access_file_system_with_resolved_paths() and not self.is_resolved():
@@ -275,7 +263,7 @@ class BaseRestrictedPath(type(AnyPath())):
 
     def write_bytes(self, *args, **kwargs):
         with _cd_tex_cwd:
-            is_writable, reason = self.tex_writable_file()
+            is_writable, reason = self.writable_file()
             if not is_writable:
                 raise PathSecurityError(f'Cannot write file "{self.as_posix()}":  {reason}')
             if self.access_file_system_with_resolved_paths() and not self.is_resolved():
@@ -284,7 +272,7 @@ class BaseRestrictedPath(type(AnyPath())):
 
     def write_text(self, *args, **kwargs):
         with _cd_tex_cwd:
-            is_writable, reason = self.tex_writable_file()
+            is_writable, reason = self.writable_file()
             if not is_writable:
                 raise PathSecurityError(f'Cannot write file "{self.as_posix()}":  {reason}')
             if self.access_file_system_with_resolved_paths() and not self.is_resolved():
@@ -436,99 +424,100 @@ class StringRestrictedPath(BaseRestrictedPath):
     def access_file_system_with_resolved_paths(cls):
         return False
 
-    def tex_readable_dir(self) -> tuple[Literal[True], None] | tuple[Literal[False], str]:
+    def readable_dir(self) -> tuple[Literal[True], None] | tuple[Literal[False], str]:
         try:
-            return self._tex_readable_dir_cache[self.cache_key]
+            return self._readable_dir_cache[self.cache_key]
         except KeyError:
-            if self.tex_can_read_anywhere():
-                self._tex_readable_dir_cache[self.cache_key] = (True, None)
+            if self.can_read_anywhere():
+                self._readable_dir_cache[self.cache_key] = (True, None)
             elif '..' in self.parts:
-                self._tex_readable_dir_cache[self.cache_key] = (
+                self._readable_dir_cache[self.cache_key] = (
                     False,
                     'security settings do not permit paths containing ".."'
                 )
             elif self.is_absolute() and not any(self.is_relative_to(p) for p in self.tex_texmfoutput_roots()):
-                self._tex_readable_dir_cache[self.cache_key] = (
+                self._readable_dir_cache[self.cache_key] = (
                     False,
                     'security settings do not permit access to this location'
                 )
             else:
-                self._tex_readable_dir_cache[self.cache_key] = (True, None)
-            return self._tex_readable_dir_cache[self.cache_key]
+                self._readable_dir_cache[self.cache_key] = (True, None)
+            return self._readable_dir_cache[self.cache_key]
 
-    def tex_readable_file(self) -> tuple[Literal[True], None] | tuple[Literal[False], str]:
+    def readable_file(self) -> tuple[Literal[True], None] | tuple[Literal[False], str]:
         try:
-            return self._tex_readable_file_cache[self.cache_key]
+            return self._readable_file_cache[self.cache_key]
         except KeyError:
-            if self.tex_can_read_dotfiles() or not self.name.startswith('.'):
-                self._tex_readable_file_cache[self.cache_key] = self.parent.tex_readable_dir()
+            if self.can_read_dotfiles() or not self.name.startswith('.'):
+                self._readable_file_cache[self.cache_key] = self.parent.readable_dir()
             else:
-                self._tex_readable_file_cache[self.cache_key] = (
+                self._readable_file_cache[self.cache_key] = (
                     False,
                     'security settings do not permit access to dotfiles'
                 )
-            return self._tex_readable_file_cache[self.cache_key]
+            return self._readable_file_cache[self.cache_key]
 
-    def tex_writable_dir(self) -> tuple[Literal[True], None] | tuple[Literal[False], str]:
+    def writable_dir(self) -> tuple[Literal[True], None] | tuple[Literal[False], str]:
         try:
-            return self._tex_writable_dir_cache[self.cache_key]
+            return self._writable_dir_cache[self.cache_key]
         except KeyError:
-            if self.tex_can_write_anywhere():
-                self._tex_writable_dir_cache[self.cache_key] = (True, None)
+            if self.can_write_anywhere():
+                self._writable_dir_cache[self.cache_key] = (True, None)
             elif '..' in self.parts:
-                self._tex_writable_dir_cache[self.cache_key] = (
+                self._writable_dir_cache[self.cache_key] = (
                     False,
                     'security settings do not permit paths containing ".."'
                 )
             elif self.is_absolute() and not any(self.is_relative_to(p) for p in self.tex_texmfoutput_roots()):
-                self._tex_writable_dir_cache[self.cache_key] = (
+                self._writable_dir_cache[self.cache_key] = (
                     False,
                     'security settings do not permit access to this location'
                 )
             else:
-                self._tex_writable_dir_cache[self.cache_key] = (True, None)
-            return self._tex_writable_dir_cache[self.cache_key]
+                self._writable_dir_cache[self.cache_key] = (True, None)
+            return self._writable_dir_cache[self.cache_key]
 
-    def tex_writable_file(self) -> tuple[Literal[True], None] | tuple[Literal[False], str]:
+    def writable_file(self) -> tuple[Literal[True], None] | tuple[Literal[False], str]:
         try:
-            return self._tex_writable_file_cache[self.cache_key]
+            return self._writable_file_cache[self.cache_key]
         except KeyError:
-            if self.enforce_tex_prohibited_write_file_extensions():
+            prohibited_write_file_extensions = self.prohibited_write_file_extensions()
+            if prohibited_write_file_extensions:
                 name_lower = self.name.lower()
-                for ext in self.tex_prohibited_write_file_extensions():
+                for ext in prohibited_write_file_extensions:
                     if name_lower.endswith(ext):
-                        self._tex_writable_file_cache[self.cache_key] = (
+                        self._writable_file_cache[self.cache_key] = (
                             False,
                             f'security settings prevent writing files with extension "{ext}"'
                         )
-                        return self._tex_writable_file_cache[self.cache_key]
-            if self.tex_can_write_dotfiles() or not self.name.startswith('.'):
-                self._tex_writable_file_cache[self.cache_key] = self.parent.tex_writable_dir()
+                        return self._writable_file_cache[self.cache_key]
+            if self.can_write_dotfiles() or not self.name.startswith('.'):
+                self._writable_file_cache[self.cache_key] = self.parent.writable_dir()
             else:
-                self._tex_writable_file_cache[self.cache_key] = (
+                self._writable_file_cache[self.cache_key] = (
                     False,
                     'security settings do not permit access to dotfiles'
                 )
-            return self._tex_writable_file_cache[self.cache_key]
+            return self._writable_file_cache[self.cache_key]
 
 
 class SafeStringRestrictedPath(StringRestrictedPath):
     __slots__ = ()
 
     @classmethod
-    def tex_can_read_anywhere(cls):
+    def can_read_anywhere(cls):
         return False
 
     @classmethod
-    def tex_can_read_dotfiles(cls):
+    def can_read_dotfiles(cls):
         return False
 
     @classmethod
-    def tex_can_write_anywhere(cls):
+    def can_write_anywhere(cls):
         return False
 
     @classmethod
-    def tex_can_write_dotfiles(cls):
+    def can_write_dotfiles(cls):
         return False
 
 
@@ -536,11 +525,11 @@ class SafeWriteStringRestrictedPath(StringRestrictedPath):
     __slots__ = ()
 
     @classmethod
-    def tex_can_write_anywhere(cls):
+    def can_write_anywhere(cls):
         return False
 
     @classmethod
-    def tex_can_write_dotfiles(cls):
+    def can_write_dotfiles(cls):
         return False
 
 
@@ -588,98 +577,99 @@ class ResolvedRestrictedPath(BaseRestrictedPath):
     def access_file_system_with_resolved_paths(cls):
         return True
 
-    def tex_readable_dir(self) -> tuple[Literal[True], None] | tuple[Literal[False], str]:
+    def readable_dir(self) -> tuple[Literal[True], None] | tuple[Literal[False], str]:
         try:
-            return self._tex_readable_dir_cache[self.cache_key]
+            return self._readable_dir_cache[self.cache_key]
         except KeyError:
-            if self.tex_can_read_anywhere():
-                self._tex_readable_dir_cache[self.cache_key] = (True, None)
+            if self.can_read_anywhere():
+                self._readable_dir_cache[self.cache_key] = (True, None)
             else:
                 resolved = self.resolve()
                 if any(resolved.is_relative_to(p) for p in self.tex_paranoid_roots_resolved()):
-                    self._tex_readable_dir_cache[self.cache_key] = (True, None)
+                    self._readable_dir_cache[self.cache_key] = (True, None)
                 else:
-                    self._tex_readable_dir_cache[self.cache_key] = (
+                    self._readable_dir_cache[self.cache_key] = (
                         False,
                         'security settings do not permit access to this location'
                     )
-            return self._tex_readable_dir_cache[self.cache_key]
+            return self._readable_dir_cache[self.cache_key]
 
-    def tex_readable_file(self) -> tuple[Literal[True], None] | tuple[Literal[False], str]:
+    def readable_file(self) -> tuple[Literal[True], None] | tuple[Literal[False], str]:
         try:
-            return self._tex_readable_file_cache[self.cache_key]
+            return self._readable_file_cache[self.cache_key]
         except KeyError:
             # Must always resolve files in case they are symlinks.  Always use
             # `self.resolve().parent` instead of `self.parent`.
             resolved = self.resolve()
-            if self.tex_can_read_dotfiles() or not any(p.name.startswith('.') for p in (self, resolved)):
-                self._tex_readable_file_cache[self.cache_key] = resolved.parent.tex_readable_dir()
+            if self.can_read_dotfiles() or not any(p.name.startswith('.') for p in (self, resolved)):
+                self._readable_file_cache[self.cache_key] = resolved.parent.readable_dir()
             else:
-                self._tex_readable_file_cache[self.cache_key] = (
+                self._readable_file_cache[self.cache_key] = (
                     False,
                     'security settings do not permit access to dotfiles'
                 )
-            return self._tex_readable_file_cache[self.cache_key]
+            return self._readable_file_cache[self.cache_key]
 
-    def tex_writable_dir(self) -> tuple[Literal[True], None] | tuple[Literal[False], str]:
+    def writable_dir(self) -> tuple[Literal[True], None] | tuple[Literal[False], str]:
         try:
-            return self._tex_writable_dir_cache[self.cache_key]
+            return self._writable_dir_cache[self.cache_key]
         except KeyError:
-            if self.tex_can_write_anywhere():
-                self._tex_writable_dir_cache[self.cache_key] = (True, None)
+            if self.can_write_anywhere():
+                self._writable_dir_cache[self.cache_key] = (True, None)
             else:
                 resolved = self.resolve()
                 if any(resolved.is_relative_to(p) for p in self.tex_paranoid_roots_resolved()):
-                    self._tex_writable_dir_cache[self.cache_key] = (True, None)
+                    self._writable_dir_cache[self.cache_key] = (True, None)
                 else:
-                    self._tex_writable_dir_cache[self.cache_key] = (
+                    self._writable_dir_cache[self.cache_key] = (
                         False,
                         'security settings do not permit access to this location'
                     )
-            return self._tex_writable_dir_cache[self.cache_key]
+            return self._writable_dir_cache[self.cache_key]
 
-    def tex_writable_file(self) -> tuple[Literal[True], None] | tuple[Literal[False], str]:
+    def writable_file(self) -> tuple[Literal[True], None] | tuple[Literal[False], str]:
         try:
-            return self._tex_writable_file_cache[self.cache_key]
+            return self._writable_file_cache[self.cache_key]
         except KeyError:
             resolved = self.resolve()
-            if self.enforce_tex_prohibited_write_file_extensions():
+            prohibited_write_file_extensions = self.prohibited_write_file_extensions()
+            if prohibited_write_file_extensions:
                 name_lower = self.name.lower()
                 resolved_name_lower = resolved.name.lower()
-                for ext in self.tex_prohibited_write_file_extensions():
+                for ext in prohibited_write_file_extensions:
                     if name_lower.endswith(ext) or resolved_name_lower.endswith(ext):
-                        self._tex_writable_file_cache[self.cache_key] = (
+                        self._writable_file_cache[self.cache_key] = (
                             False,
                             f'security settings prevent writing files with extension "{ext}"'
                         )
-                        return self._tex_writable_file_cache[self.cache_key]
-            if self.tex_can_write_dotfiles() or not any(p.name.startswith('.') for p in (self, resolved)):
-                self._tex_writable_file_cache[self.cache_key] = resolved.parent.tex_writable_dir()
+                        return self._writable_file_cache[self.cache_key]
+            if self.can_write_dotfiles() or not any(p.name.startswith('.') for p in (self, resolved)):
+                self._writable_file_cache[self.cache_key] = resolved.parent.writable_dir()
             else:
-                self._tex_writable_file_cache[self.cache_key] = (
+                self._writable_file_cache[self.cache_key] = (
                     False,
                     'security settings do not permit access to dotfiles'
                 )
-            return self._tex_writable_file_cache[self.cache_key]
+            return self._writable_file_cache[self.cache_key]
 
 
 class SafeResolvedRestrictedPath(ResolvedRestrictedPath):
     __slots__ = ()
 
     @classmethod
-    def tex_can_read_anywhere(cls):
+    def can_read_anywhere(cls):
         return False
 
     @classmethod
-    def tex_can_read_dotfiles(cls):
+    def can_read_dotfiles(cls):
         return False
 
     @classmethod
-    def tex_can_write_anywhere(cls):
+    def can_write_anywhere(cls):
         return False
 
     @classmethod
-    def tex_can_write_dotfiles(cls):
+    def can_write_dotfiles(cls):
         return False
 
 
@@ -687,9 +677,9 @@ class SafeWriteResolvedRestrictedPath(ResolvedRestrictedPath):
     __slots__ = ()
 
     @classmethod
-    def tex_can_write_anywhere(cls):
+    def can_write_anywhere(cls):
         return False
 
     @classmethod
-    def tex_can_write_dotfiles(cls):
+    def can_write_dotfiles(cls):
         return False

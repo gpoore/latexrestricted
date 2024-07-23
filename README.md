@@ -170,13 +170,13 @@ from latexrestricted import <RestrictedPathClass>
 `RestrictedPath` classes:
 
 * `BaseRestrictedPath`:  This is the base class for `RestrictedPath` classes.
-  It cannot be used directly.  Subclasses define methods
-  `.tex_readable_dir()`, `.tex_readable_file()`, `.tex_writable_dir()`, and
-  `.tex_writable_file()` that determine whether a given path is
-  readable/writable.  Most methods for opening, reading, writing, replacing,
-  and deleting files as well as methods for creating and deleting directories
-  are supported.  Methods related to modifying file permissions and creating
-  links are not supported.  Unsupported methods raise `NotImplementedError`.
+  It cannot be used directly.  Subclasses define methods `.readable_dir()`,
+  `.readable_file()`, `.writable_dir()`, and `.writable_file()` that determine
+  whether a given path is readable/writable.  Most methods for opening,
+  reading, writing, replacing, and deleting files as well as methods for
+  creating and deleting directories are supported.  Methods related to
+  modifying file permissions and creating links are not supported.
+  Unsupported methods raise `NotImplementedError`.
 
 * `StringRestrictedPath`:  This follows the approach taken in TeX's file
   system security.  TeX configuration determines whether dotfiles are
