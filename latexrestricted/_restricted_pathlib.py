@@ -311,23 +311,24 @@ class BaseRestrictedPath(type(AnyPath())):
             return cls._TEXMF_OUTPUT_DIRECTORY
 
     @classmethod
-    def tex_openout_roots(cls) -> list[Self]:
-        # This is a list of paths because these are the directories that TeX
+    def tex_openout_roots(cls) -> tuple[Self]:
+        # This is a tuple of paths because these are the directories that TeX
         # will try to write to in order.  If TEXMF_OUTPUT_DIRECTORY or the
         # current working directory is not writable, then TeX will fall back
         # to TEXMFOUTPUT if it is set.
         try:
             return cls._tex_openout_roots
         except AttributeError:
-            cls._tex_openout_roots = []
+            openout_roots = []
             TEXMF_OUTPUT_DIRECTORY = cls.TEXMF_OUTPUT_DIRECTORY()
             if TEXMF_OUTPUT_DIRECTORY:
-                cls._tex_openout_roots.append(TEXMF_OUTPUT_DIRECTORY)
+                openout_roots.append(TEXMF_OUTPUT_DIRECTORY)
             else:
-                cls._tex_openout_roots.append(cls.tex_cwd())
+                openout_roots.append(cls.tex_cwd())
             TEXMFOUTPUT = cls.TEXMFOUTPUT()
-            if TEXMFOUTPUT and TEXMFOUTPUT not in cls._tex_openout_roots:
-                cls._tex_openout_roots.append(TEXMFOUTPUT)
+            if TEXMFOUTPUT and TEXMFOUTPUT not in openout_roots:
+                openout_roots.append(TEXMFOUTPUT)
+            cls._tex_openout_roots = tuple(openout_roots)
             return cls._tex_openout_roots
 
     @classmethod
