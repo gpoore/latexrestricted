@@ -332,50 +332,52 @@ class BaseRestrictedPath(type(AnyPath())):
             return cls._tex_openout_roots
 
     @classmethod
-    def tex_paranoid_roots(cls) -> set[Self]:
-        # All possible paths that TeX can write to when write locations are
-        # restricted ("paranoid" mode).
+    def tex_roots(cls) -> frozenset[Self]:
+        # Root paths of all locations that TeX can always access, even when
+        # file system access is restricted ("paranoid" mode).
         try:
-            return cls._tex_paranoid_roots
+            return cls._tex_roots
         except AttributeError:
-            cls._tex_paranoid_roots = set()
-            cls._tex_paranoid_roots.add(cls.tex_cwd())
+            tex_roots = set()
+            tex_roots.add(cls.tex_cwd())
             TEXMF_OUTPUT_DIRECTORY = cls.TEXMF_OUTPUT_DIRECTORY()
             if TEXMF_OUTPUT_DIRECTORY:
-                cls._tex_paranoid_roots.add(TEXMF_OUTPUT_DIRECTORY)
+                tex_roots.add(TEXMF_OUTPUT_DIRECTORY)
             TEXMFOUTPUT = cls.TEXMFOUTPUT()
             if TEXMFOUTPUT:
-                cls._tex_paranoid_roots.add(TEXMFOUTPUT)
-            return cls._tex_paranoid_roots
+                tex_roots.add(TEXMFOUTPUT)
+            cls._tex_roots = frozenset(tex_roots)
+            return cls._tex_roots
 
     @classmethod
-    def tex_paranoid_roots_resolved(cls) -> set[Self]:
+    def tex_roots_resolved(cls) -> frozenset[Self]:
         try:
-            return cls._tex_paranoid_roots_resolved
+            return cls._tex_roots_resolved
         except AttributeError:
-            cls._tex_paranoid_roots_resolved = set(p.resolve() for p in cls.tex_paranoid_roots())
-            return cls._tex_paranoid_roots_resolved
+            cls._tex_roots_resolved = frozenset(p.resolve() for p in cls.tex_roots())
+            return cls._tex_roots_resolved
 
     @classmethod
-    def tex_paranoid_roots_with_resolved(cls) -> set[Self]:
+    def tex_roots_with_resolved(cls) -> frozenset[Self]:
         try:
-            return cls._tex_paranoid_roots_with_resolved
+            return cls._tex_roots_with_resolved
         except KeyError:
-            cls._tex_paranoid_roots_with_resolved = cls.tex_paranoid_roots() | cls.tex_paranoid_roots_resolved()
-            return cls._tex_paranoid_roots_with_resolved
+            cls._tex_roots_with_resolved = cls.tex_roots() | cls.tex_roots_resolved()
+            return cls._tex_roots_with_resolved
 
     @classmethod
-    def tex_texmfoutput_roots(cls) -> set[Self]:
+    def tex_texmfoutput_roots(cls) -> frozenset[Self]:
         try:
             return cls._tex_texmfoutput_roots
         except AttributeError:
-            cls._tex_texmfoutput_roots = set()
+            tex_texmfoutput_roots = set()
             TEXMF_OUTPUT_DIRECTORY = cls.TEXMF_OUTPUT_DIRECTORY()
             if TEXMF_OUTPUT_DIRECTORY:
-                cls._tex_texmfoutput_roots.add(TEXMF_OUTPUT_DIRECTORY)
+                tex_texmfoutput_roots.add(TEXMF_OUTPUT_DIRECTORY)
             TEXMFOUTPUT = cls.TEXMFOUTPUT()
             if TEXMFOUTPUT:
-                cls._tex_texmfoutput_roots.add(TEXMFOUTPUT)
+                tex_texmfoutput_roots.add(TEXMFOUTPUT)
+            cls._tex_texmfoutput_roots = frozenset(tex_texmfoutput_roots)
             return cls._tex_texmfoutput_roots
 
 
@@ -586,7 +588,7 @@ class ResolvedRestrictedPath(BaseRestrictedPath):
                 self._readable_dir_cache[self.cache_key] = (True, None)
             else:
                 resolved = self.resolve()
-                if any(resolved.is_relative_to(p) for p in self.tex_paranoid_roots_resolved()):
+                if any(resolved.is_relative_to(p) for p in self.tex_roots_resolved()):
                     self._readable_dir_cache[self.cache_key] = (True, None)
                 else:
                     self._readable_dir_cache[self.cache_key] = (
@@ -619,7 +621,7 @@ class ResolvedRestrictedPath(BaseRestrictedPath):
                 self._writable_dir_cache[self.cache_key] = (True, None)
             else:
                 resolved = self.resolve()
-                if any(resolved.is_relative_to(p) for p in self.tex_paranoid_roots_resolved()):
+                if any(resolved.is_relative_to(p) for p in self.tex_roots_resolved()):
                     self._writable_dir_cache[self.cache_key] = (True, None)
                 else:
                     self._writable_dir_cache[self.cache_key] = (
