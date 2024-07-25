@@ -117,9 +117,9 @@ LaTeX configuration and related environment variables.
 * `TEXMF_OUTPUT_DIRECTORY: str | None`:  Value of `TEXMF_OUTPUT_DIRECTORY`
   obtained from environment variable.
 
-* `restricted_shell_escape_commands: set[str]`:  Permitted restricted shell
-  escape executables.  Obtained from TeX Live's `shell_escape_commands` in
-  `texmf.cnf` or MiKTeX's `[Core]AllowedShellCommands[]` in `miktex.ini`.
+* `restricted_shell_escape_commands: frozenset[str]`:  Permitted restricted
+  shell escape executables.  Obtained from TeX Live's `shell_escape_commands`
+  in `texmf.cnf` or MiKTeX's `[Core]AllowedShellCommands[]` in `miktex.ini`.
 
   Note that this will contain permitted restricted shell escape executables
   even when shell escape is completely disabled; it cannot be used to
@@ -266,13 +266,13 @@ restricted_run(args: list[str], allow_restricted_executables: bool = False)
   necessary to access TeX configuration values.
 
   Running other executables allowed by TeX configuration for restricted shell
-  escape requires the optional argument `allow_restricted_executables=true`.
+  escape requires the optional argument `allow_restricted_executables=True`.
   In this case, TeX configuration is checked to determine whether restricted
   shell escape is enabled, although this should be redundant if
   `latexrestricted` itself is being used in a restricted shell escape
   executable.
 
-* When `allow_restricted_executables=true`, the executable must be in the same
+* When `allow_restricted_executables=True`, the executable must be in the same
   directory as `kpsewhich` or `initexmf`, as previously located during TeX
   configuration detection, or the executable must exist on `PATH`, as found by
   Python's `shutil.which()`.

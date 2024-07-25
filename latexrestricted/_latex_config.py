@@ -285,6 +285,7 @@ class LatexConfig(object):
         value = proc.stdout.strip().decode(sys.stdout.encoding) or None
         if cache:
             self._kpsewhich_find_file_cache[file] = value
+            return self._kpsewhich_find_file_cache[file]
         return value
 
 
@@ -316,7 +317,7 @@ class LatexConfig(object):
             if value:
                 value = value.rstrip(',%')
         cls._texlive_var_value_cache[var] = value
-        return value
+        return cls._texlive_var_value_cache[var]
 
     _miktex_config_value_cache: dict[str, str | None] = {}
 
@@ -332,10 +333,12 @@ class LatexConfig(object):
         proc = subprocess.run(cmd, shell=False, capture_output=True)
         value = proc.stdout.strip().decode(sys.stdout.encoding) or None
         if var.lower() in ('[core]allowunsafeinputfiles', '[core]allowunsafeoutputfiles'):
+            if value:
+                value = value.lower()
             if value not in ('true', 'false'):
                 value = 'false'
         cls._miktex_config_value_cache[var] = value
-        return value
+        return cls._miktex_config_value_cache[var]
 
 
     _did_init_read_settings: bool = False
@@ -411,10 +414,10 @@ class LatexConfig(object):
                 raise ValueError
         elif cls._miktex_initexmf:
             allow_unsafe_output_files = cls._get_miktex_config_value('[Core]AllowUnsafeOutputFiles')
-            if allow_unsafe_output_files is True:
+            if allow_unsafe_output_files == 'true':
                 cls._can_write_dotfiles = True
                 cls._can_write_anywhere = True
-            elif allow_unsafe_output_files is False:
+            elif allow_unsafe_output_files == 'false':
                 cls._can_write_dotfiles = False
                 cls._can_write_anywhere = False
             else:
@@ -448,7 +451,7 @@ class LatexConfig(object):
     if platform.system() == 'Windows':
         _pathext = os.getenv('PATHEXT')
         if _pathext:
-            _prohibited_write_file_extensions = frozenset(_pathext.lower().split(os.pathsep))
+            _prohibited_write_file_extensions = frozenset(x for x in _pathext.lower().split(os.pathsep) if x)
         else:
             _prohibited_write_file_extensions = _fallback_prohibited_write_file_extensions
     elif platform.system().lower().startswith('cygwin'):
@@ -508,7 +511,7 @@ class LatexConfig(object):
             else:
                 raise TypeError
             self._var_str_none_cache['TEXMFHOME'] = value
-            return value
+            return self._var_str_none_cache['TEXMFHOME']
 
     @property
     def TEXMFOUTPUT(self) -> str | None:
@@ -520,7 +523,7 @@ class LatexConfig(object):
                 # TeX Live allows `TEXMFOUTPUT` to be set in `texmf.cnf`
                 value = self._get_texlive_var_value('TEXMFOUTPUT')
             self._var_str_none_cache['TEXMFOUTPUT'] = value
-            return value
+            return self._var_str_none_cache['TEXMFOUTPUT']
 
     @property
     def TEXMF_OUTPUT_DIRECTORY(self) -> str | None:
@@ -529,14 +532,14 @@ class LatexConfig(object):
         except KeyError:
             value = os.getenv('TEXMF_OUTPUT_DIRECTORY')
             self._var_str_none_cache['TEXMF_OUTPUT_DIRECTORY'] = value
-            return value
+            return self._var_str_none_cache['TEXMF_OUTPUT_DIRECTORY']
 
-    _var_set_cache: dict[str, set[str]] = {}
+    _var_frozenset_cache: dict[str, frozenset[str]] = {}
 
     @property
-    def restricted_shell_escape_commands(self) -> set[str]:
+    def restricted_shell_escape_commands(self) -> frozenset[str]:
         try:
-            return self._var_set_cache['restricted_shell_escape_commands']
+            return self._var_frozenset_cache['restricted_shell_escape_commands']
         except KeyError:
             commands = set()
             if self.texlive_kpsewhich:
@@ -549,8 +552,8 @@ class LatexConfig(object):
                     commands.update(value.split(';'))
             else:
                 raise TypeError
-            self._var_set_cache['restricted_shell_escape_commands'] = commands
-            return commands
+            self._var_frozenset_cache['restricted_shell_escape_commands'] = frozenset(commands)
+            return self._var_frozenset_cache['restricted_shell_escape_commands']
 
 
 
