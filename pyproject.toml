@@ -38,7 +38,7 @@ changelog = 'https://github.com/gpoore/latexrestricted/blob/main/CHANGELOG.md'
 
 
 [tool.setuptools]
-license-files = ['LICENSE*', 'CHANGELOG*', 'RESTRICTED_SHELL_ESCAPE*']
+license-files = ['LICENSE*', 'CHANGELOG*']
 
 [tool.setuptools.dynamic]
 version = {attr = 'latexrestricted.__version__'}
