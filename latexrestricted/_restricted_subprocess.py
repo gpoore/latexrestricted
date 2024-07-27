@@ -56,16 +56,16 @@ def restricted_run(args: list[str], allow_restricted_executables: bool = False) 
     '''
 
     if not isinstance(args, list) or not args or not all(isinstance(x, str) for x in args):
-        raise TypeError
+        raise TypeError('"args" must be a list of strings')
     if not isinstance(allow_restricted_executables, bool):
-        raise TypeError
+        raise TypeError('"allow_restricted_executables" must be a bool')
 
     executable = args[0]
     if executable not in _always_approved_executables:
         if not allow_restricted_executables:
             raise UnapprovedExecutableError(
                 'Cannot use executables other than "kpsewhich" and "initexmf" '
-                'when argument "allow_restricted_executables" is False'
+                'when "allow_restricted_executables" is False'
             )
         if not latex_config.can_restricted_shell_escape:
             raise UnapprovedExecutableError(
