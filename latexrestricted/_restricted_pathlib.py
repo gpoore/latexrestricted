@@ -98,7 +98,9 @@ class BaseRestrictedPath(type(AnyPath())):
     # path is resolved first.  This should be true for subclasses that perform
     # path security analysis using resolved paths.  Otherwise, the file system
     # (symlinks) could be modified after security analysis but before a path
-    # is used, so that the security analysis is invalid.
+    # is used, so that the security analysis is invalid.  Note that due to the
+    # `.resolve()` caching from `AnyPath`, a path will always resolve in the
+    # same way.
     @classmethod
     def access_file_system_with_resolved_paths(cls) -> bool:
         raise NotImplementedError
@@ -505,6 +507,11 @@ class StringRestrictedPath(BaseRestrictedPath):
 
 
 class SafeStringRestrictedPath(StringRestrictedPath):
+    '''
+    Restrict paths by analyzing them as strings.  TeX configuration is ignored
+    and all security settings are at maximum.
+    '''
+
     __slots__ = ()
 
     @classmethod
@@ -525,6 +532,11 @@ class SafeStringRestrictedPath(StringRestrictedPath):
 
 
 class SafeWriteStringRestrictedPath(StringRestrictedPath):
+    '''
+    Restrict paths by analyzing them as strings.  TeX configuration is ignored
+    for writing and all write security settings are at maximum.
+    '''
+
     __slots__ = ()
 
     @classmethod
@@ -640,7 +652,7 @@ class ResolvedRestrictedPath(BaseRestrictedPath):
                 name_lower = self.name.lower()
                 resolved_name_lower = resolved.name.lower()
                 for ext in prohibited_write_file_extensions:
-                    if name_lower.endswith(ext) or resolved_name_lower.endswith(ext):
+                    if any(name.endswith(ext) for name in (name_lower, resolved_name_lower)):
                         self._writable_file_cache[self.cache_key] = (
                             False,
                             f'security settings prevent writing files with extension "{ext}"'
@@ -657,6 +669,12 @@ class ResolvedRestrictedPath(BaseRestrictedPath):
 
 
 class SafeResolvedRestrictedPath(ResolvedRestrictedPath):
+    '''
+    Restrict paths by resolving any symlinks with the file system and then
+    comparing resolved paths to permitted read/write locations.  TeX
+    configuration is ignored and all security settings are at maximum.
+    '''
+
     __slots__ = ()
 
     @classmethod
@@ -677,6 +695,13 @@ class SafeResolvedRestrictedPath(ResolvedRestrictedPath):
 
 
 class SafeWriteResolvedRestrictedPath(ResolvedRestrictedPath):
+    '''
+    Restrict paths by resolving any symlinks with the file system and then
+    comparing resolved paths to permitted read/write locations.  TeX
+    configuration is ignored for writing and all write security settings are
+    at maximum.
+    '''
+
     __slots__ = ()
 
     @classmethod
