@@ -178,6 +178,12 @@ from latexrestricted import <RestrictedPathClass>
   modifying file permissions and creating links are not supported.
   Unsupported methods raise `NotImplementedError`.
 
+  **Relative paths are always relative to the TeX working directory.**  If the
+  current working directory has been changed to another location (for example,
+  via `os.chdir()`), then it will temporarily be switched back to the TeX
+  working directory during any `BaseRestrictedPath` operations that access the
+  file system.
+
 * `StringRestrictedPath`:  This follows the approach taken in TeX's file
   system security.  TeX configuration determines whether dotfiles are
   readable/writable and which locations are readable/writable.  Paths are
@@ -247,6 +253,40 @@ installations, there is no guarantee that `latexrestricted` will find the
 correct installation and thus use the correct TeX configuration (see
 `latex_config.miktex_bin` above for more details).
 
+
+`RestrictedPath` class methods:
+
+* `tex_cwd() -> Self`:  TeX working directory.
+
+* `TEXMFOUTPUT() -> Self | None`:  Path of `TEXMFOUTPUT` from LaTeX
+  configuration or environment variable, or `None` if not defined.
+
+* `TEXMF_OUTPUT_DIRECTORY() -> Self | None`:  Path of `TEXMF_OUTPUT_DIRECTORY`
+  from environment variable, or `None` if not defined.
+
+* `tex_roots() -> frozenset[Self]`:  All root locations where TeX might write
+  output, under default configuration with restricted access to the file
+  system.  This includes `tex_cwd()` plus `TEXMFOUTPUT()` and
+  `TEXMF_OUTPUT_DIRECTORY()` if they are defined.
+
+* `tex_roots_resolved() -> frozenset[Self]`:  Same as `tex_roots()` except
+  all paths are resolved with the file system.
+
+* `tex_roots_with_resolved() -> frozenset[Self]`:  Union of `tex_roots()` and
+  `tex_roots_resolved()`.
+
+* `tex_openout_roots() -> tuple[Self]`:  Locations where TeX will attempt to
+  write with `\openout`, in order.  The first element of the tuple is
+  `TEXMF_OUTPUT_DIRECTORY()` if not `None` and otherwise `tex_cwd()`.  If
+  `TEXMFOUTPUT()` is not `None` and is not already in the tuple, then it is
+  the second element.
+
+  TeX attempts to write to `$TEXMFOUTPUT` (if defined) when the default write
+  location (`$TEXMF_OUTPUT_DIRECTORY` if defined, else TeX working directory)
+  is read-only.
+
+* `tex_texmfoutput_roots() -> frozenset[Self]`:  `TEXMFOUTPUT()` and/or
+  `TEXMF_OUTPUT_DIRECTORY()` if they are defined.
 
 
 ## Restricted subprocesses
