@@ -51,9 +51,14 @@ from latexrestricted import latex_config
 ```
 
 The `latex_config` instance of the `LatexConfig` class provides access to
-LaTeX configuration and related environment variables.
+LaTeX configuration and related environment variables.  If there are errors in
+determining LaTeX configuration (for example, a TeX installation cannot be
+located), then `latexrestricted.LatexConfigError` is raised.
 
-`latex_config` attributes and properties:
+
+### `latex_config` attributes and properties
+
+Paths:
 
 * `tex_cwd: str`:  Current working directory when `latexrestricted` was
   first imported.
@@ -84,6 +89,8 @@ LaTeX configuration and related environment variables.
   to put the correct installation first, or by manually setting the
   environment variable `SELFAUTOLOC` to the correct MiKTeX binary directory.
 
+File system access:
+
 * `can_read_dotfiles: bool`, `can_read_anywhere: bool`,
   `can_write_dotfiles: bool`, `can_write_anywhere: bool`:  These summarize
   the file system security settings for TeX Live (`openin_any` and
@@ -108,6 +115,8 @@ LaTeX configuration and related environment variables.
   `.exe`).  These are determined from the `PATHEXT` environment variable, or
   use a default fallback if `PATHEXT` is not defined or when under Cygwin.
 
+Other LaTeX configuration variables and environment variables:
+
 * `TEXMFHOME: str | None`:  Value of `TEXMFHOME` obtained from `kpsewhich`
   or `initexmf`.
 
@@ -127,7 +136,8 @@ LaTeX configuration and related environment variables.
   `can_restricted_shell_escape` to determine whether restricted shell escape
   is permitted.
 
-`latex_config` methods:
+
+### `latex_config` methods
 
 * `kpsewhich_find_config_file(file: str)`:  Use `kpsewhich` in a subprocess
   to find a configuration file (`kpsewhich -f othertext <file>`).  Returns
@@ -140,10 +150,6 @@ LaTeX configuration and related environment variables.
   can be useful when the file system is not being modified and `kpsewhich` is
   simply returning values from its own cache.
 
-If there are errors in determining LaTeX configuration (for example, a TeX
-installation cannot be located), then `latexrestricted.LatexConfigError` is
-raised.
-
 
 
 ## Restricted file system access
@@ -155,7 +161,7 @@ TeX limits file system access.  The file system security settings for TeX Live
 anywhere in the file system can be read/written, or only those under the
 current working directory, `$TEXMFOUTPUT`, and `$TEXMF_OUTPUT_DIRECTORY`.
 
-The `latexrestricted` package provides subclasses of Python's
+The `latexrestricted` package provides `RestrictedPath` subclasses of Python's
 [`pathlib.Path`](https://docs.python.org/3/library/pathlib.html) that respect
 these security settings or enforce more stringent security.  Under Python 3.8,
 these subclasses backport the methods `.is_relative_to()` and `.with_stem()`
@@ -163,26 +169,36 @@ from Python 3.9.  When these subclasses are used to modify the file system,
 `latexrestricted.PathSecurityError` is raised if reading/writing a given path
 is not permitted.
 
+**With `RestrictedPath` classes, relative paths are always relative to the TeX
+working directory.**  If the current working directory has been changed to
+another location (for example, via `os.chdir()`), then it will temporarily be
+switched back to the TeX working directory during any `RestrictedPath`
+operations that access the file system.
+
+The `SafeWrite*` classes should be preferred unless access to additional write
+locations is absolutely necessary.  On systems with multiple MiKTeX
+installations, there is no guarantee that `latexrestricted` will find the
+correct installation and thus use the correct TeX configuration (see
+`latex_config.miktex_bin` above for more details).
+
 ```
 from latexrestricted import <RestrictedPathClass>
 ```
 
-`RestrictedPath` classes:
+### `RestrictedPath` classes
 
-* `BaseRestrictedPath`:  This is the base class for `RestrictedPath` classes.
-  It cannot be used directly.  Subclasses define methods `.readable_dir()`,
-  `.readable_file()`, `.writable_dir()`, and `.writable_file()` that determine
-  whether a given path is readable/writable.  Most methods for opening,
-  reading, writing, replacing, and deleting files as well as methods for
-  creating and deleting directories are supported.  Methods related to
-  modifying file permissions and creating links are not supported.
-  Unsupported methods raise `NotImplementedError`.
+#### `BaseRestrictedPath`
 
-  **Relative paths are always relative to the TeX working directory.**  If the
-  current working directory has been changed to another location (for example,
-  via `os.chdir()`), then it will temporarily be switched back to the TeX
-  working directory during any `BaseRestrictedPath` operations that access the
-  file system.
+This is the base class for `RestrictedPath` classes.  It cannot be used
+directly.  Subclasses define methods `.readable_dir()`, `.readable_file()`,
+`.writable_dir()`, and `.writable_file()` that determine whether a given path
+is readable/writable.  Most methods for opening, reading, writing, replacing,
+and deleting files as well as methods for creating and deleting directories
+are supported.  Methods related to modifying file permissions and creating
+links are not supported.  Unsupported methods raise `NotImplementedError`.
+
+
+#### `StringRestrictedPath` classes
 
 * `StringRestrictedPath`:  This follows the approach taken in TeX's file
   system security.  TeX configuration determines whether dotfiles are
@@ -213,6 +229,9 @@ from latexrestricted import <RestrictedPathClass>
 * `SafeWriteStringRestrictedPath`:  Same as `StringRestrictedPath`, except
   that TeX configuration for writing is ignored and all security settings
   related to writing are at maximum.
+
+
+#### `ResolvedRestrictedPath` classes
 
 * `ResolvedRestrictedPath`:  This resolves any symlinks in paths using the
   file system before determining whether paths are readable/writable.  TeX
@@ -247,14 +266,8 @@ from latexrestricted import <RestrictedPathClass>
   that TeX configuration for writing is ignored and all security settings
   related to writing are at maximum.
 
-The `SafeWrite*` classes should be preferred unless access to additional write
-locations is absolutely necessary.  On systems with multiple MiKTeX
-installations, there is no guarantee that `latexrestricted` will find the
-correct installation and thus use the correct TeX configuration (see
-`latex_config.miktex_bin` above for more details).
 
-
-`RestrictedPath` class methods:
+#### `RestrictedPath` class methods
 
 * `tex_cwd() -> Self`:  TeX working directory.
 
