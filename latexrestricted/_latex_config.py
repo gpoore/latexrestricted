@@ -78,10 +78,16 @@ class LatexConfig(object):
 
     _prohibited_subprocess_executable_roots: set[AnyPath] = set()
     _prohibited_subprocess_executable_roots.add(_tex_cwd_anypath)
+    # TeX Live allows `TEXMFOUTPUT` to be set in a `texmf.cnf` config file.
+    # In `_init_tex_paths()`, if TeX Live is detected and a `TEXMFOUTPUT`
+    # environment variable is not defined, then `kpsewhich` is used to
+    # retrieve the value of `TEXMFOUTPUT`, and that value is used to update
+    # `_prohibited_subprocess_executable_roots`.
     for env_var in [os.getenv(x) for x in ('TEXMFOUTPUT', 'TEXMF_OUTPUT_DIRECTORY')]:
         if env_var:
-            _prohibited_subprocess_executable_roots.add(AnyPath(env_var))
-    _prohibited_subprocess_executable_roots.update([p.resolve() for p in _prohibited_subprocess_executable_roots])
+            env_var_path = AnyPath(env_var)
+            _prohibited_subprocess_executable_roots.add(env_var_path)
+            _prohibited_subprocess_executable_roots.add(env_var_path.resolve())
 
     @classmethod
     def _resolve_and_check_executable(cls, executable_name: str, executable_path: AnyPath) -> AnyPath:
@@ -104,12 +110,22 @@ class LatexConfig(object):
         # checking all locations writable by LaTeX for symlinks to problematic
         # locations.  That isn't worth doing since TeX path security does not
         # consider symlinks.
+        #
+        # Initially, this doesn't check for the scenario where `TEXMFOUTPUT`
+        # is set in a `texmf.cnf` config file with TeX Live.  There isn't a
+        # good way to check for that without running `kpsewhich`.  As part of
+        # `_init_tex_paths()`, `_prohibited_subprocess_executable_roots` is
+        # updated under that scenario by running `kpsewhich` to get
+        # `TEXMFOUTPUT`.  Then this function is invoked to check the
+        # `kpsewhich` executable against `TEXMFOUTPUT`.  Giving an error
+        # message after already running `kpsewhich` isn't ideal, but there
+        # isn't a good alternative.  Also, if `TEXMFOUTPUT` is set to an
+        # unsafe value in a `texmf.cnf` config file, then all TeX-related
+        # executables are potentially compromised, so running `kpsewhich` has
+        # a negligible impact on overall security.
         if any(e.is_relative_to(p) or p.is_relative_to(e)
                for e in set([executable_path.parent, executable_resolved.parent])
                for p in cls._prohibited_subprocess_executable_roots):
-            # This doesn't check for the scenario where `TEXMFOUTPUT` is
-            # set in a `texmf.cnf` config file.  There isn't a good way to
-            # check for that without running `kpsewhich`.
             raise LatexConfigError(
                 f'Executable "{executable_name}" is located under the current directory, $TEXMFOUTPUT, or '
                 '$TEXMF_OUTPUT_DIRECTORY, or one of these locations is under the same directory as the executable'
@@ -166,6 +182,15 @@ class LatexConfig(object):
                     cls._texlive_bin = str(which_kpsewhich_resolved.parent)
                     cls._texlive_kpsewhich = str(which_kpsewhich_resolved)
                 cls._did_init_tex_paths = True
+                if cls._texlive_kpsewhich and not os.getenv('TEXMFOUTPUT'):
+                    # With TeX Live, check for unsafe value of `TEXMFOUTPUT`
+                    # from `texmf.cnf` config file.
+                    TEXMFOUTPUT = cls._get_texlive_var_value('TEXMFOUTPUT')
+                    if TEXMFOUTPUT:
+                        TEXMFOUTPUT_path = AnyPath(TEXMFOUTPUT)
+                        cls._prohibited_subprocess_executable_roots.add(TEXMFOUTPUT_path)
+                        cls._prohibited_subprocess_executable_roots.add(TEXMFOUTPUT_path.resolve())
+                        cls._resolve_and_check_executable('kpsewhich', which_kpsewhich_path)
                 return
             raise LatexConfigError(
                 f'Environment variable SELFAUTOLOC has value "{SELFAUTOLOC}", '

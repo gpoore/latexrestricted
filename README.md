@@ -350,3 +350,40 @@ approved list of executables from LaTeX configuration
 `latexrestricted.ExecutablePathSecurityError` if the executable is found and
 is in the approved list, but is in an insecure location relative to locations
 writable by LaTeX.
+
+
+
+## Security limitations
+
+TeX Live allows `TEXMFOUTPUT` to be set in a `texmf.cnf` config file.  In this
+case, `latexrestricted` will retrieve the value of `TEXMFOUTPUT` by running
+`kpsewhich --var-value TEXMFOUTPUT` in a subprocess.  If the user has modified
+`TEXMFOUTPUT` to an unsafe value in a `texmf.cnf` config file, then the
+`kpsewhich` executable (and all other TeX-related executables) are potentially
+compromised, and `latexrestricted` cannot detect this until *after* running
+`kpsewhich`.
+
+It is possible to set `TEXMFOUTPUT` to unsafe values in a `texmf.cnf` config
+file.  For example, if `TEXMFOUTPUT` is set to a location in the file system
+that contains executables, this could allow LaTeX documents to modify those
+executables or their resources.  With TeX Live, `latexrestricted` retrieves
+the value of `TEXMFOUTPUT` by running `kpsewhich`.  However, the `kpsewhich`
+executable itself could be compromised if `TEXMFOUTPUT` is set to a directory
+that contains the `kpsewhich` executable (or other parts of a TeX
+installation).  If `latexrestricted` detects an unsafe value of `TEXMFOUTPUT`,
+it raises `latexrestricted.LatexConfigError`, but this is only possible
+*after* running the potentially compromised `kpsewhich` executable to obtain
+the value of `TEXMFOUTPUT`.  (And if `kpsewhich` is compromised, there is
+always the possibility that it will not return the true value of
+`TEXMFOUTPUT`.)
+
+While raising a security-related error after running the potentially
+compromised executable is not ideal, this will typically have a negligible
+impact on overall security.  If `TEXMFOUTPUT` is set to a directory that
+contains the `kpsewhich` executable (or other parts of a TeX installation),
+then all other TeX-related executables are also potentially compromised.  If
+`latexrestricted` is being used in a Python executable designed for LaTeX
+shell escape, then presumably a LaTeX executable is already running, and LaTeX
+may invoke additional trusted executables such as `kpsewhich` in shells.
+Thus, before `latexrestricted` ever runs `kpsewhich` to retrieve the value of
+`TEXMFOUTPUT`, potentially compromised executables would already be running.
