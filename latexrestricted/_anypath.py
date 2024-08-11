@@ -22,7 +22,9 @@ except ImportError:
 
 # The `type(...)` is needed to inherit the `_flavour` attribute
 class AnyPath(type(pathlib.Path())):
-    __slots__ = ('_cache_key')
+    __slots__ = (
+        '_cache_key',
+    )
 
     if sys.version_info[:2] < (3, 9):
         def is_relative_to(self, other: AnyPath) -> bool:
