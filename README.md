@@ -99,7 +99,7 @@ File system access:
   properties describe whether dotfiles (files with names beginning with `.`)
   can be read/written.  The `*anywhere` properties describe whether files
   anywhere in the file system can be read/written, or only those under the
-  current working directory, `$TEXMFOUTPUT`, and `$TEXMF_OUTPUT_DIRECTORY`.
+  current working directory, `TEXMFOUTPUT`, and `TEXMF_OUTPUT_DIRECTORY`.
 
 * `can_restricted_shell_escape: bool`:  This describes whether restricted
   shell escape is possible.  It is true when restricted shell escape is
@@ -159,7 +159,7 @@ TeX limits file system access.  The file system security settings for TeX Live
 (`[Core]AllowUnsafeInputFiles` and `[Core]AllowUnsafeOutputFiles` in
 `miktex.ini`) determine whether dotfiles can be read/written and whether files
 anywhere in the file system can be read/written, or only those under the
-current working directory, `$TEXMFOUTPUT`, and `$TEXMF_OUTPUT_DIRECTORY`.
+current working directory, `TEXMFOUTPUT`, and `TEXMF_OUTPUT_DIRECTORY`.
 
 The `latexrestricted` package provides `RestrictedPath` subclasses of Python's
 [`pathlib.Path`](https://docs.python.org/3/library/pathlib.html) that respect
@@ -208,15 +208,15 @@ links are not supported.  Unsupported methods raise `NotImplementedError`.
 
   - All relative paths are relative to the TeX working directory.
 
-  - All absolute paths must be under `$TEXMF_OUTPUT_DIRECTORY` and
-    `$TEXMFOUTPUT`.
+  - All absolute paths must be under `TEXMF_OUTPUT_DIRECTORY` and
+    `TEXMFOUTPUT`.
 
   - Paths cannot contain `..` to access a parent directory, even if the
     parent directory is a valid location.
 
   When read/write locations are restricted, it is still possible to access
-  locations outside the TeX working directory, `$TEXMF_OUTPUT_DIRECTORY`, and
-  `$TEXMFOUTPUT` if there are symlinks in those locations.
+  locations outside the TeX working directory, `TEXMF_OUTPUT_DIRECTORY`, and
+  `TEXMFOUTPUT` if there are symlinks in those locations.
 
   Under Windows (including Cygwin), writing files with file extensions in
   `PATHEXT` (for example, `.exe`) is also disabled.
@@ -224,7 +224,7 @@ links are not supported.  Unsupported methods raise `NotImplementedError`.
 * `SafeStringRestrictedPath`:  Same as `StringRestrictedPath`, except that TeX
   configuration is ignored and all security settings are at maximum:  dotfiles
   cannot be read/written, and all reading/writing is limited to the TeX
-  working directory, `$TEXMF_OUTPUT_DIRECTORY`, and `$TEXMFOUTPUT`.
+  working directory, `TEXMF_OUTPUT_DIRECTORY`, and `TEXMFOUTPUT`.
 
 * `SafeWriteStringRestrictedPath`:  Same as `StringRestrictedPath`, except
   that TeX configuration for writing is ignored and all security settings
@@ -240,18 +240,18 @@ links are not supported.  Unsupported methods raise `NotImplementedError`.
   paths are restricted using the following criteria:
 
   - Resolved paths must be under the TeX working directory,
-    resolved `$TEXMF_OUTPUT_DIRECTORY`, or resolved `$TEXMFOUTPUT`.
+    resolved `TEXMF_OUTPUT_DIRECTORY`, or resolved `TEXMFOUTPUT`.
 
   - All relative paths are resolved relative to the TeX working directory.
 
   - Unlike `StringRestrictedPath`, paths are allowed to contain `..`, and
-    `$TEXMF_OUTPUT_DIRECTORY` and `$TEXMFOUTPUT` can be accessed via relative
+    `TEXMF_OUTPUT_DIRECTORY` and `TEXMFOUTPUT` can be accessed via relative
     paths.  This is possible since paths are fully resolved with the file
     system before being compared with permitted read/write locations.
 
   Because paths are resolved before being compared with permitted read/write
   locations, it is not possible to access locations outside the TeX working
-  directory, `$TEXMF_OUTPUT_DIRECTORY`, and `$TEXMFOUTPUT` via symlinks in
+  directory, `TEXMF_OUTPUT_DIRECTORY`, and `TEXMFOUTPUT` via symlinks in
   those locations.
 
   Under Windows (including Cygwin), writing files with file extensions in
@@ -260,7 +260,7 @@ links are not supported.  Unsupported methods raise `NotImplementedError`.
 * `SafeResolvedRestrictedPath`:  Same as `ResolvedRestrictedPath`,  except
   that TeX configuration is ignored and all security settings are at maximum:
   dotfiles cannot be read/written, and all other reading/writing is limited to
-  the TeX working directory, `$TEXMF_OUTPUT_DIRECTORY`, and `$TEXMFOUTPUT`.
+  the TeX working directory, `TEXMF_OUTPUT_DIRECTORY`, and `TEXMFOUTPUT`.
 
 * `SafeWriteResolvedRestrictedPath`:  Same as `ResolvedRestrictedPath`, except
   that TeX configuration for writing is ignored and all security settings
@@ -294,8 +294,8 @@ links are not supported.  Unsupported methods raise `NotImplementedError`.
   `TEXMFOUTPUT()` is not `None` and is not already in the tuple, then it is
   the second element.
 
-  TeX attempts to write to `$TEXMFOUTPUT` (if defined) when the default write
-  location (`$TEXMF_OUTPUT_DIRECTORY` if defined, else TeX working directory)
+  TeX attempts to write to `TEXMFOUTPUT` (if defined) when the default write
+  location (`TEXMF_OUTPUT_DIRECTORY` if defined, else TeX working directory)
   is read-only.
 
 * `tex_texmfoutput_roots() -> frozenset[Self]`:  `TEXMFOUTPUT()` and/or

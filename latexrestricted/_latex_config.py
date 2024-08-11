@@ -43,8 +43,8 @@ class LatexConfig(object):
     The `*dotfile` settings describe whether files with names starting with a
     dot `.` are allowed to be read/written.  The `*anywhere` settings
     describe whether files anywhere are allowed to be read/written, or only
-    files within the current working directory, $TEXMFOUTPUT,
-    $TEXMF_OUTPUT_DIRECTORY, and their subdirectories.  The values of these
+    files within the current working directory, TEXMFOUTPUT,
+    TEXMF_OUTPUT_DIRECTORY, and their subdirectories.  The values of these
     properties are determined from `openout_any` and `openin_any` settings in
     `texmf.cnf` for TeX Live, and from `[Core]AllowUnsafeInputFiles` and
     `[Core]AllowUnsafeOutputFiles` in `miktex.ini` for MiKTeX.
@@ -127,8 +127,8 @@ class LatexConfig(object):
                for e in set([executable_path.parent, executable_resolved.parent])
                for p in cls._prohibited_subprocess_executable_roots):
             raise LatexConfigError(
-                f'Executable "{executable_name}" is located under the current directory, $TEXMFOUTPUT, or '
-                '$TEXMF_OUTPUT_DIRECTORY, or one of these locations is under the same directory as the executable'
+                f'Executable "{executable_name}" is located under the current directory, TEXMFOUTPUT, or '
+                'TEXMF_OUTPUT_DIRECTORY, or one of these locations is under the same directory as the executable'
             )
         return executable_resolved
 

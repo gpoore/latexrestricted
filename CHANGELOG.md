@@ -3,7 +3,10 @@
 
 ## v0.3.0 (dev)
 
-* Fixed `__slots__` bug in `AnyPath`.
+*  Fixed `__slots__` bug in `AnyPath`.
+
+*  Replaced all `$TEXMF*` with `TEXMF*` in error messages and documentation
+   for better consistency.
 
 
 ## v0.2.0 (2024-08-10)

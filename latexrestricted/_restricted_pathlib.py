@@ -398,21 +398,21 @@ class StringRestrictedPath(BaseRestrictedPath):
     `latex_config`.
 
     When reading or writing locations are restricted to the TeX working
-    directory plus $TEXMF_OUTPUT_DIRECTORY and $TEXMFOUTPUT, paths are
+    directory plus TEXMF_OUTPUT_DIRECTORY and TEXMFOUTPUT, paths are
     restricted using the following criteria:
 
       * All relative paths are relative to the TeX working directory.  (This
         is already enforced by `BaseRestrictedPath`.)
 
-      * All absolute paths must be under $TEXMF_OUTPUT_DIRECTORY and
-        $TEXMFOUTPUT.
+      * All absolute paths must be under TEXMF_OUTPUT_DIRECTORY and
+        TEXMFOUTPUT.
 
       * Paths cannot contain `..` to access a parent directory, even if the
         parent directory is a valid location.
 
     Because paths are analyzed as strings, it is still possible to access
-    locations outside the TeX working directory, $TEXMF_OUTPUT_DIRECTORY, and
-    $TEXMFOUTPUT via symlinks in these locations.  Symlinks are not resolved
+    locations outside the TeX working directory, TEXMF_OUTPUT_DIRECTORY, and
+    TEXMFOUTPUT via symlinks in these locations.  Symlinks are not resolved
     in determining whether paths are valid, since paths are analyzed as
     strings without consulting the file system.
 
@@ -560,23 +560,23 @@ class ResolvedRestrictedPath(BaseRestrictedPath):
     variables are accessed via `latex_config`.
 
     When reading or writing locations are restricted to the TeX working
-    directory plus $TEXMF_OUTPUT_DIRECTORY and $TEXMFOUTPUT, paths are
+    directory plus TEXMF_OUTPUT_DIRECTORY and TEXMFOUTPUT, paths are
     restricted using the following criteria:
 
       * Resolved paths must be under the TeX working directory,
-        $TEXMF_OUTPUT_DIRECTORY, or $TEXMFOUTPUT.
+        TEXMF_OUTPUT_DIRECTORY, or TEXMFOUTPUT.
 
       * All relative paths are resolved relative to the TeX working directory.
         (This is already enforced by `BaseRestrictedPath`.)
 
       * Unlike `StringRestrictedPath`, paths are allowed to contain `..`, and
-        $TEXMF_OUTPUT_DIRECTORY and $TEXMFOUTPUT can be accessed via relative
+        TEXMF_OUTPUT_DIRECTORY and TEXMFOUTPUT can be accessed via relative
         paths.  This is possible since paths are fully resolved with the file
         system before being compared with permitted read/write locations.
 
     Because paths are resolved before being compared with permitted read/write
     locations, it is not possible to access locations outside the TeX working
-    directory, $TEXMF_OUTPUT_DIRECTORY, and $TEXMFOUTPUT via symlinks in those
+    directory, TEXMF_OUTPUT_DIRECTORY, and TEXMFOUTPUT via symlinks in those
     locations.
 
     Depending on LaTeX configuration, reading or writing file names starting

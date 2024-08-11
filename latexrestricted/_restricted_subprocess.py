@@ -114,8 +114,8 @@ def restricted_run(args: list[str], allow_restricted_executables: bool = False) 
            for e in set([which_executable_path.parent, which_executable_resolved.parent])
            for p in prohibited_path_roots):
         raise ExecutablePathSecurityError(
-            f'Executable "{executable}" is located under the current directory, $TEXMFOUTPUT, '
-            'or $TEXMF_OUTPUT_DIRECTORY, or one of these locations is under the same directory '
+            f'Executable "{executable}" is located under the current directory, TEXMFOUTPUT, '
+            'or TEXMF_OUTPUT_DIRECTORY, or one of these locations is under the same directory '
             'as the executable'
         )
 
