@@ -1,7 +1,7 @@
 # Changelog — `latexrestricted` Python package
 
 
-## v0.3.0 (dev)
+## v0.3.0 (2024-08-11)
 
 *  Fixed `__slots__` bug in `AnyPath`.
 
