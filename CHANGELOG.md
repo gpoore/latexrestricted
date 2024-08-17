@@ -1,7 +1,7 @@
 # Changelog — `latexrestricted` Python package
 
 
-## v0.4.0 (dev)
+## v0.4.0 (2024-08-16)
 
 * Under Windows with TeX Live, the `SELFAUTOLOC` environment variable is no
   longer used to locate `kpsewhich`.  Under these conditions, a shell escape
