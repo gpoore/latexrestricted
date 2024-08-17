@@ -27,20 +27,27 @@ current working directory is changed, then the TeX working directory will be
 set incorrectly and security restrictions will fail.
 
 
-### Systems with multiple TeX installations
+### Failure modes on systems with multiple TeX installations
 
-`latexrestricted` works correctly when used with
-[TeX Live](https://www.tug.org/texlive/) on systems with multiple TeX Live or
-other TeX installations.
+`latexrestricted` works correctly when used on systems with no more than one
+[TeX Live](https://www.tug.org/texlive/) installation and no more than one
+[MiKTeX](https://miktex.org/) installation.  If multiple TeX Live
+installations or multiple MiKTeX installations are present, it is not always
+possible for `latexrestricted` to determine the correct TeX Live or MiKTeX
+installation, and in these cases the first installation on `PATH` is used.
+**In these cases, `latexrestricted` may fail to return the correct TeX
+configuration values, and there is no way to detect this.**  See
+`LatexConfig._init_tex_paths()` for implementation details.
 
-**`latexrestricted` may fail when used with [MiKTeX](https://miktex.org/) on
-systems with multiple MiKTeX installations.  It may use the wrong MiKTeX
-installation, and there is no way to detect this.**
+  * Multiple TeX Live installations:  The correct installation will be used
+    under non-Windows operating systems.  Under Windows, the first
+    installation on `PATH` is used.
 
-The user can resolve this by modifying `PATH` to put the correct MiKTeX
-installation first, or by manually setting the environment variable
-`SELFAUTOLOC` to the correct MiKTeX binary directory.  See
-`latex_config.miktex_bin` below for more details.
+  * Multiple MiKTeX installations:  Under all operating systems, the first
+    installation on `PATH` is used.
+
+The user can avoid any issues with multiple installations by modifying `PATH`
+to put the correct TeX Live or MiKTeX installation first.
 
 
 
@@ -68,10 +75,19 @@ Paths:
   Live, these will be the paths to the TeX Live `bin/` directory and the TeX
   Live `kpsewhich` executable.  Otherwise, both are `None`.
 
-  TeX Live is detected via the `SELFAUTOLOC` environment variable.  Because
-  `SELFAUTOLOC` gives the location of TeX binaries, `texlive_bin` and
-  `texlive_kpsewhich` will be correct even on systems with multiple TeX Live
-  or other TeX installations.
+  TeX Live is detected by the absence of a `TEXSYSTEM` environment variable,
+  or by this variable having a value other than `miktex`.  Under non-Windows
+  operating systems, the `SELFAUTOLOC` environment variable set by `kpathsea`
+  is used to locate the TeX Live binary directory, so it will be correct even
+  on systems with multiple TeX Live installations.  Under Windows, shell
+  escape executables are often launched with TeX Live's executable wrapper
+  `runscript.exe`, which overwrites `SELFAUTOLOC` with the location of the
+  wrapper.  In this case, the TeX Live binary directory is located by using
+  Python's `shutil.which()` to search `PATH` for a `tlmgr` executable with
+  accompanying `kpsewhich`.  On systems with multiple TeX Live installations,
+  this will give the first TeX Live installation on `PATH`, which is not
+  guaranteed to be correct unless the user ensures that the correct
+  installation has precedence on `PATH`.
 
 * `miktex_bin: str | None`, `miktex_initexmf: str | None`, and
   `miktex_kpsewhich: str | None`:  If an executable using `latexrestricted`
@@ -79,15 +95,15 @@ Paths:
   MiKTeX `bin/` directory and the MiKTeX `initexmf` and `kpsewhich`
   executables.  Otherwise, all are `None`.
 
-  MiKTeX is detected via the `TEXSYSTEM` environment variable.  `TEXSYSTEM`
-  only declares that MiKTeX is in use; unlike the TeX Live case with
-  `SELFAUTOLOC`, `TEXSYSTEM` does not give the location of TeX binaries.  The
-  location of TeX binaries is determined using Python's `shutil.which()` to
-  search for `initexmf`.  This gives the location of the first `initexmf`
-  executable on `PATH`.  If there are multiple MiKTeX installations, this is
-  not guaranteed to be correct.  The user can resolve this by modifying `PATH`
-  to put the correct installation first, or by manually setting the
-  environment variable `SELFAUTOLOC` to the correct MiKTeX binary directory.
+  MiKTeX is detected by checking the `TEXSYSTEM` environment variable for  the
+  value `miktex`.  `TEXSYSTEM` only declares that MiKTeX is in use; unlike the
+  TeX Live case with `SELFAUTOLOC`, `TEXSYSTEM` does not give the location of
+  TeX binaries.  The location of TeX binaries is determined using Python's
+  `shutil.which()` to search `PATH` for an `initexmf` executable with
+  accompanying `kpsewhich`.  On systems with multiple MiKTeX installations,
+  this will give the first MiKTeX installation on `PATH`, which is not
+  guaranteed to be correct unless the user ensures that the correct
+  installation has precedence on `PATH`.
 
 File system access:
 
@@ -175,11 +191,13 @@ another location (for example, via `os.chdir()`), then it will temporarily be
 switched back to the TeX working directory during any `RestrictedPath`
 operations that access the file system.
 
-The `SafeWrite*` classes should be preferred unless access to additional write
-locations is absolutely necessary.  On systems with multiple MiKTeX
-installations, there is no guarantee that `latexrestricted` will find the
-correct installation and thus use the correct TeX configuration (see
-`latex_config.miktex_bin` above for more details).
+**The `SafeWrite*` classes should be preferred unless access to additional
+write locations is absolutely necessary.**  When multiple TeX Live
+installations are present under Windows or multiple MiKTeX installations are
+present under all operating systems, there is no guarantee that
+`latexrestricted` will find the correct installation and thus use the correct
+TeX configuration, unless `PATH` has been modified to put the correct
+installation first.
 
 ```
 from latexrestricted import <RestrictedPathClass>
@@ -353,7 +371,7 @@ writable by LaTeX.
 
 
 
-## Security limitations
+## Security limitations with TeX Live and `TEXMFOUTPUT`
 
 TeX Live allows `TEXMFOUTPUT` to be set in a `texmf.cnf` config file.  In this
 case, `latexrestricted` will retrieve the value of `TEXMFOUTPUT` by running

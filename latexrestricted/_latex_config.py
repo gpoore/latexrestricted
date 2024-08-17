@@ -26,11 +26,25 @@ class LatexConfig(object):
     Access config settings from `kpsewhich` (TeX Live) or `initexmf` (MiKTeX),
     plus related environment variables.  Also locate files via `kpsewhich`.
 
-    With TeX Live, the environment variable SELFAUTOLOC is used to determine
-    the correct `kpsewhich` executable on systems with multiple TeX
-    installations.  With MiKTeX, Python's `shutil.which()` is used to locate
-    `initexmf`, and then the location of `initexmf` is used to find the
-    accompanying `kpsewhich` (unless SELFAUTOLOC has been set manually).
+    If the environment variable `TEXSYSTEM` is set to `miktex`, then `PATH` is
+    searched with `shutil.which()` for an `initexmf` executable with an
+    accompanying `kpsewhich`.  This is only guaranteed to give the correct
+    executables (and thus return the correct LaTeX config settings) if there
+    is only one MiKTeX installation or if the correct MiKTeX installation is
+    the first installation on `PATH`.
+
+    Otherwise, TeX Live is assumed.  Under non-Windows operating systems, the
+    `SELFAUTOLOC` environment variable is used to locate the correct
+    `kpsewhich`.  Under Windows, `SELFAUTOLOC` may be overwritten by the
+    `runscript.exe` wrapper for TeX Live shell escape executables, so it
+    cannot be trusted.  (If the shell invokes a TeX Live shell escape
+    executable in the wrong TeX installation, due to `PATH` precedence, then
+    `SELFAUTOLOC` is overwritten with an incorrect value, and this cannot be
+    detected.)  Instead, `PATH` is searched for a `tlmgr` executable with
+    accompanying `kpsewhich`.  This is only guaranteed to give the correct
+    executables (and thus return the correct LaTeX config settings) if there
+    is only one TeX Live installation or if the correct TeX Live installation
+    is the first installation on `PATH`.
 
     File read/write permission settings are available via the following
     properties:
@@ -41,13 +55,13 @@ class LatexConfig(object):
       * `can_write_anywhere`
 
     The `*dotfile` settings describe whether files with names starting with a
-    dot `.` are allowed to be read/written.  The `*anywhere` settings
-    describe whether files anywhere are allowed to be read/written, or only
-    files within the current working directory, TEXMFOUTPUT,
-    TEXMF_OUTPUT_DIRECTORY, and their subdirectories.  The values of these
-    properties are determined from `openout_any` and `openin_any` settings in
-    `texmf.cnf` for TeX Live, and from `[Core]AllowUnsafeInputFiles` and
-    `[Core]AllowUnsafeOutputFiles` in `miktex.ini` for MiKTeX.
+    dot `.` are allowed to be read/written.  The `*anywhere` settings describe
+    whether files anywhere are allowed to be read/written, or only files
+    within the current working directory, TEXMFOUTPUT, TEXMF_OUTPUT_DIRECTORY,
+    and their subdirectories.  The values of these properties are determined
+    from `openout_any` and `openin_any` settings in `texmf.cnf` for TeX Live,
+    and from `[Core]AllowUnsafeInputFiles` and `[Core]AllowUnsafeOutputFiles`
+    in `miktex.ini` for MiKTeX.
 
     Shell escape settings are available via the property
     `can_restricted_shell_escape`.  This is based on `shell_escape` in
@@ -142,103 +156,101 @@ class LatexConfig(object):
 
     @classmethod
     def _init_tex_paths(cls):
-        SELFAUTOLOC = os.getenv('SELFAUTOLOC')
-        TEXSYSTEM = os.getenv('TEXSYSTEM')
-        if SELFAUTOLOC:
-            if platform.system() == 'Windows':
-                # Make sure executable is *.exe, not *.bat or *.cmd:
-                # https://docs.python.org/3/library/subprocess.html#security-considerations
-                which_kpsewhich = shutil.which('kpsewhich.exe', path=SELFAUTOLOC)
-            else:
-                which_kpsewhich = shutil.which('kpsewhich', path=SELFAUTOLOC)
-            if which_kpsewhich:
-                which_kpsewhich_path = AnyPath(which_kpsewhich)
-                which_kpsewhich_resolved = cls._resolve_and_check_executable('kpsewhich', which_kpsewhich_path)
-                if TEXSYSTEM and TEXSYSTEM.lower() == 'miktex':
-                    if platform.system() == 'Windows':
-                        which_initexmf = shutil.which('initexmf.exe', path=SELFAUTOLOC)
-                    else:
-                        which_initexmf = shutil.which('initexmf', path=SELFAUTOLOC)
-                    if not which_initexmf:
-                        raise LatexConfigError(
-                            f'Environment variable TEXSYSTEM has value "{TEXSYSTEM}" and '
-                            f'environment variable SELFAUTOLOC has value "{SELFAUTOLOC}", '
-                            'but a MiKTeX "initexmf" executable was not found at that location'
-                        )
-                    which_initexmf_path = AnyPath(which_initexmf)
-                    which_initexmf_resolved = cls._resolve_and_check_executable('initexmf', which_initexmf_path)
-                    if not which_initexmf_resolved.parent == which_kpsewhich_resolved.parent:
-                        raise LatexConfigError(
-                            f'Environment variable TEXSYSTEM has value "{TEXSYSTEM}" and '
-                            f'environment variable SELFAUTOLOC has value "{SELFAUTOLOC}", '
-                            f'but "initexmf" executable resolved to "{which_initexmf_resolved.as_posix()}" '
-                            f'while "kpsewhich" resolved to "{which_kpsewhich_resolved.as_posix()}"; '
-                            '"initexmf" and "kpsewhich" should be in the same location'
-                        )
-                    cls._miktex_bin = str(which_initexmf_resolved.parent)
-                    cls._miktex_initexmf = str(which_initexmf_resolved)
-                    cls._miktex_kpsewhich = str(which_kpsewhich_resolved)
-                else:
-                    cls._texlive_bin = str(which_kpsewhich_resolved.parent)
-                    cls._texlive_kpsewhich = str(which_kpsewhich_resolved)
-                cls._did_init_tex_paths = True
-                if cls._texlive_kpsewhich and not os.getenv('TEXMFOUTPUT'):
-                    # With TeX Live, check for unsafe value of `TEXMFOUTPUT`
-                    # from `texmf.cnf` config file.
-                    TEXMFOUTPUT = cls._get_texlive_var_value('TEXMFOUTPUT')
-                    if TEXMFOUTPUT:
-                        TEXMFOUTPUT_path = AnyPath(TEXMFOUTPUT)
-                        cls._prohibited_subprocess_executable_roots.add(TEXMFOUTPUT_path)
-                        cls._prohibited_subprocess_executable_roots.add(TEXMFOUTPUT_path.resolve())
-                        cls._resolve_and_check_executable('kpsewhich', which_kpsewhich_path)
-                return
+        env_TEXSYSTEM = os.getenv('TEXSYSTEM')
+        if env_TEXSYSTEM and env_TEXSYSTEM.lower() == 'miktex':
+            cls._init_tex_paths_miktex()
+        else:
+            cls._init_tex_paths_texlive()
+
+    @classmethod
+    def _init_tex_paths_miktex(cls):
+        if platform.system() == 'Windows':
+            which_initexmf = shutil.which('initexmf.exe')
+        else:
+            which_initexmf = shutil.which('initexmf')
+        if not which_initexmf:
             raise LatexConfigError(
-                f'Environment variable SELFAUTOLOC has value "{SELFAUTOLOC}", '
-                'but a "kpsewhich" executable was not found at that location'
+                'Environment variable TEXSYSTEM="miktex", but failed to find "initexmf" executable on PATH'
             )
-        if TEXSYSTEM:
-            if TEXSYSTEM.lower() != 'miktex':
+        which_initexmf_path = AnyPath(which_initexmf)
+        which_initexmf_resolved = cls._resolve_and_check_executable('initexmf', which_initexmf_path)
+        miktex_bin_path = which_initexmf_resolved.parent
+        if platform.system() == 'Windows':
+            which_kpsewhich = shutil.which('kpsewhich.exe', path=str(miktex_bin_path))
+        else:
+            which_kpsewhich = shutil.which('kpsewhich', path=str(miktex_bin_path))
+        if not which_kpsewhich:
+            raise LatexConfigError(
+                'Environment variable TEXSYSTEM="miktex", '
+                'but failed to find an "initexmf" executable with accompanying "kpsewhich" on PATH'
+            )
+        which_kpsewhich_path = AnyPath(which_kpsewhich)
+        which_kpsewhich_resolved = cls._resolve_and_check_executable('kpsewhich', which_kpsewhich_path)
+        if not miktex_bin_path == which_kpsewhich_resolved.parent:
+            raise LatexConfigError(
+                'Environment variable TEXSYSTEM="miktex", '
+                f'but "initexmf" executable from PATH resolved to "{which_initexmf_resolved.as_posix()}" '
+                f'while "kpsewhich" resolved to "{which_kpsewhich_resolved.as_posix()}"; '
+                '"initexmf" and "kpsewhich" should be in the same location'
+            )
+        cls._miktex_bin = str(miktex_bin_path)
+        cls._miktex_initexmf = str(which_initexmf_resolved)
+        cls._miktex_kpsewhich = str(which_kpsewhich_resolved)
+        cls._did_init_tex_paths = True
+
+    @classmethod
+    def _init_tex_paths_texlive(cls):
+        env_SELFAUTOLOC = os.getenv('SELFAUTOLOC')
+        if not env_SELFAUTOLOC:
+            raise LatexConfigError('Environment variable SELFAUTOLOC is expected for TeX Live, but was not set')
+        if platform.system() == 'Windows':
+            # Under Windows, shell escape executables installed within TeX
+            # Live are launched with the `runscript.exe` wrapper.  This uses
+            # `kpathsea` internally, which will overwrite any existing value
+            # of `SELFAUTOLOC`.  As a result, under Windows, `SELFAUTOLOC` may
+            # only give the location of the wrapper executable rather than the
+            # location of the TeX executable that is invoking shell escape.
+            which_tlmgr = shutil.which('tlmgr')  # No `.exe`; likely `.bat`
+            if not which_tlmgr:
+                raise LatexConfigError('Failed to find TeX Live "tlmgr" executable on PATH')
+            which_tlmgr_resolved = AnyPath(which_tlmgr).resolve()
+            texlive_bin_path = which_tlmgr_resolved.parent
+            which_kpsewhich = shutil.which('kpsewhich.exe', path=str(texlive_bin_path))
+            if not which_kpsewhich:
                 raise LatexConfigError(
-                    f'Environment variable TEXSYSTEM has unsupported value "{TEXSYSTEM}" '
-                    'while environment variable SELFAUTOLOC is not set'
+                    'Failed to find a TeX Live "tlmgr" executable with accompanying "kpsewhich" executable on PATH'
                 )
-            # Unlike the TeX Live case, there isn't a good way deal with the
-            # possibility of multiple installations, so just use
-            # `shutil.which()` without a specified `path`.
-            if platform.system() == 'Windows':
-                which_initexmf = shutil.which('initexmf.exe')
-            else:
-                which_initexmf = shutil.which('initexmf')
-            if which_initexmf:
-                which_initexmf_path = AnyPath(which_initexmf)
-                which_initexmf_resolved = cls._resolve_and_check_executable('initexmf', which_initexmf_path)
-                if platform.system() == 'Windows':
-                    which_kpsewhich = shutil.which('kpsewhich.exe', path=str(which_initexmf_resolved.parent))
-                else:
-                    which_kpsewhich = shutil.which('kpsewhich', path=str(which_initexmf_resolved.parent))
-                if which_kpsewhich:
-                    which_kpsewhich_path = AnyPath(which_kpsewhich)
-                    which_kpsewhich_resolved = cls._resolve_and_check_executable('kpsewhich', which_kpsewhich_path)
-                    if not which_initexmf_resolved.parent == which_kpsewhich_resolved.parent:
-                        raise LatexConfigError(
-                            f'Environment variable TEXSYSTEM has value "{TEXSYSTEM}", '
-                            f'but "initexmf" executable from PATH resolved to "{which_initexmf_resolved.as_posix()}" '
-                            f'while "kpsewhich" resolved to "{which_kpsewhich_resolved.as_posix()}"; '
-                            '"initexmf" and "kpsewhich" should be in the same location'
-                        )
-                    cls._miktex_bin = str(which_initexmf_resolved.parent)
-                    cls._miktex_initexmf = str(which_initexmf_resolved)
-                    cls._miktex_kpsewhich = str(which_kpsewhich_resolved)
-                    cls._did_init_tex_paths = True
-                    return
-            raise LatexConfigError(
-                f'Environment variable TEXSYSTEM has value "{TEXSYSTEM}", '
-                'but a MiKTeX "initexmf" executable with accompanying "kpsewhich" was not found on PATH'
-            )
-        raise LatexConfigError(
-            'Expected environment variables SELFAUTOLOC and/or TEXSYSTEM were not found, '
-            'so the correct "kpsewhich" executable and/or MiKTeX "initexmf" executable could not be located'
-        )
+            which_kpsewhich_path = AnyPath(which_kpsewhich)
+            which_kpsewhich_resolved = cls._resolve_and_check_executable('kpsewhich', which_kpsewhich_path)
+            if not texlive_bin_path == which_kpsewhich_resolved.parent:
+                raise LatexConfigError(
+                    f'"tlmgr" executable from PATH resolved to "{which_tlmgr_resolved.as_posix()}" '
+                    f'while "kpsewhich" resolved to "{which_kpsewhich_resolved.as_posix()}"; '
+                    '"tlmgr" and "kpsewhich" should be in the same location'
+                )
+        else:
+            env_SELFAUTOLOC_which_kpsewhich = shutil.which('kpsewhich', path=env_SELFAUTOLOC)
+            if not env_SELFAUTOLOC_which_kpsewhich:
+                raise LatexConfigError(
+                    f'Environment variable SELFAUTOLOC has value "{env_SELFAUTOLOC}", '
+                    'but a "kpsewhich" executable was not found at that location'
+                )
+            which_kpsewhich_path = AnyPath(env_SELFAUTOLOC_which_kpsewhich)
+            which_kpsewhich_resolved = cls._resolve_and_check_executable('kpsewhich', which_kpsewhich_path)
+            texlive_bin_path = which_kpsewhich_resolved.parent
+        cls._texlive_bin = str(texlive_bin_path)
+        cls._texlive_kpsewhich = str(which_kpsewhich_resolved)
+        cls._did_init_tex_paths = True
+        if not os.getenv('TEXMFOUTPUT'):
+            # With TeX Live, check for unsafe value of `TEXMFOUTPUT` from
+            # `texmf.cnf` config file.
+            config_TEXMFOUTPUT = cls._get_texlive_var_value('TEXMFOUTPUT')
+            if config_TEXMFOUTPUT:
+                config_TEXMFOUTPUT_path = AnyPath(config_TEXMFOUTPUT)
+                cls._prohibited_subprocess_executable_roots.add(config_TEXMFOUTPUT_path)
+                cls._prohibited_subprocess_executable_roots.add(config_TEXMFOUTPUT_path.resolve())
+                cls._resolve_and_check_executable('kpsewhich', which_kpsewhich_path)
+
 
     # Locations of TeX executables must be returned as strings, not as
     # `AnyPath`.  All non-private paths should be subclasses of
