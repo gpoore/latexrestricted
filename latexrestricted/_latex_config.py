@@ -11,7 +11,6 @@
 from __future__ import annotations
 
 import os
-import platform
 import shutil
 import subprocess
 import sys
@@ -164,7 +163,7 @@ class LatexConfig(object):
 
     @classmethod
     def _init_tex_paths_miktex(cls):
-        if platform.system() == 'Windows':
+        if sys.platform == 'win32':
             which_initexmf = shutil.which('initexmf.exe')
         else:
             which_initexmf = shutil.which('initexmf')
@@ -175,7 +174,7 @@ class LatexConfig(object):
         which_initexmf_path = AnyPath(which_initexmf)
         which_initexmf_resolved = cls._resolve_and_check_executable('initexmf', which_initexmf_path)
         miktex_bin_path = which_initexmf_resolved.parent
-        if platform.system() == 'Windows':
+        if sys.platform == 'win32':
             which_kpsewhich = shutil.which('kpsewhich.exe', path=str(miktex_bin_path))
         else:
             which_kpsewhich = shutil.which('kpsewhich', path=str(miktex_bin_path))
@@ -203,7 +202,7 @@ class LatexConfig(object):
         env_SELFAUTOLOC = os.getenv('SELFAUTOLOC')
         if not env_SELFAUTOLOC:
             raise LatexConfigError('Environment variable SELFAUTOLOC is expected for TeX Live, but was not set')
-        if platform.system() == 'Windows':
+        if sys.platform == 'win32':
             # Under Windows, shell escape executables installed within TeX
             # Live are launched with the `runscript.exe` wrapper.  This uses
             # `kpathsea` internally, which will overwrite any existing value
@@ -485,13 +484,13 @@ class LatexConfig(object):
     _fallback_prohibited_write_file_extensions = frozenset(
         ';'.join([_microsoft_default_pathext, _kpathsea_default_pathext]).lower().split(';')
     )
-    if platform.system() == 'Windows':
+    if sys.platform == 'win32':
         _pathext = os.getenv('PATHEXT')
         if _pathext:
             _prohibited_write_file_extensions = frozenset(x for x in _pathext.lower().split(os.pathsep) if x)
         else:
             _prohibited_write_file_extensions = _fallback_prohibited_write_file_extensions
-    elif platform.system().lower().startswith('cygwin'):
+    elif sys.platform == 'cygwin':
         # This follows kpathsea:
         # https://tug.org/svn/texlive/trunk/Build/source/texk/kpathsea/progname.c?revision=57915&view=markup#l424
         _prohibited_write_file_extensions = _fallback_prohibited_write_file_extensions

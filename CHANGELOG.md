@@ -1,6 +1,15 @@
 # Changelog — `latexrestricted` Python package
 
 
+## v0.5.0 (dev)
+
+*  Switched from `platform.system()` to `sys.platform` for better performance
+   in detecting operating system.
+
+   Performance reference:  https://github.com/python/cpython/issues/95531.
+
+
+
 ## v0.4.0 (2024-08-16)
 
 * Under Windows with TeX Live, the `SELFAUTOLOC` environment variable is no

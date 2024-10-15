@@ -10,9 +10,9 @@
 
 from __future__ import annotations
 
-import platform
 import shutil
 import subprocess
+import sys
 from .err import UnapprovedExecutableError, ExecutableNotFoundError, ExecutablePathSecurityError
 from ._anypath import AnyPath
 from ._latex_config import latex_config
@@ -89,7 +89,7 @@ def restricted_run(args: list[str], allow_restricted_executables: bool = False) 
 
     which_executable_path = AnyPath(which_executable)
     which_executable_resolved = which_executable_path.resolve()
-    if platform.system() == 'Windows' and not which_executable_resolved.name.lower().endswith('.exe'):
+    if sys.platform == 'win32' and not which_executable_resolved.name.lower().endswith('.exe'):
         raise UnapprovedExecutableError(
             f'Executable "{executable}" resolved to "{which_executable_resolved.as_posix()}", but *.exe is required'
         )
