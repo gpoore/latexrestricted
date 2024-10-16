@@ -1,7 +1,7 @@
 # Changelog — `latexrestricted` Python package
 
 
-## v0.5.0 (dev)
+## v0.5.0 (2024-10-16)
 
 *  Switched from `platform.system()` to `sys.platform` for better performance
    in detecting operating system.
