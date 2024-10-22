@@ -1,6 +1,17 @@
 # Changelog — `latexrestricted` Python package
 
 
+## v0.6.0 (dev)
+
+*  Reorganized logic in `ResolvedRestrictedPath` to improve performance.
+   Methods `can_read_anywhere()`, `can_read_dotfiles()`,
+   `can_write_anywhere()`, and `can_write_dotfiles()` are no longer called
+   for non-dotfiles in locations that are always readable/writable by TeX.
+   This eliminates the overhead of getting read/write security settings from
+   `kpsewhich` or `initexmf`.
+
+
+
 ## v0.5.0 (2024-10-16)
 
 *  Switched from `platform.system()` to `sys.platform` for better performance

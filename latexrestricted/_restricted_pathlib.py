@@ -596,17 +596,14 @@ class ResolvedRestrictedPath(BaseRestrictedPath):
         try:
             return self._readable_dir_cache[self.cache_key]
         except KeyError:
-            if self.can_read_anywhere():
+            resolved = self.resolve()
+            if any(resolved.is_relative_to(p) for p in self.tex_roots_resolved()) or self.can_read_anywhere():
                 self._readable_dir_cache[self.cache_key] = (True, None)
             else:
-                resolved = self.resolve()
-                if any(resolved.is_relative_to(p) for p in self.tex_roots_resolved()):
-                    self._readable_dir_cache[self.cache_key] = (True, None)
-                else:
-                    self._readable_dir_cache[self.cache_key] = (
-                        False,
-                        'security settings do not permit access to this location'
-                    )
+                self._readable_dir_cache[self.cache_key] = (
+                    False,
+                    'security settings do not permit access to this location'
+                )
             return self._readable_dir_cache[self.cache_key]
 
     def readable_file(self) -> tuple[Literal[True], None] | tuple[Literal[False], str]:
@@ -616,7 +613,7 @@ class ResolvedRestrictedPath(BaseRestrictedPath):
             # Must always resolve files in case they are symlinks.  Always use
             # `self.resolve().parent` instead of `self.parent`.
             resolved = self.resolve()
-            if self.can_read_dotfiles() or not any(p.name.startswith('.') for p in (self, resolved)):
+            if not any(p.name.startswith('.') for p in (self, resolved)) or self.can_read_dotfiles():
                 self._readable_file_cache[self.cache_key] = resolved.parent.readable_dir()
             else:
                 self._readable_file_cache[self.cache_key] = (
@@ -629,17 +626,14 @@ class ResolvedRestrictedPath(BaseRestrictedPath):
         try:
             return self._writable_dir_cache[self.cache_key]
         except KeyError:
-            if self.can_write_anywhere():
+            resolved = self.resolve()
+            if any(resolved.is_relative_to(p) for p in self.tex_roots_resolved()) or self.can_write_anywhere():
                 self._writable_dir_cache[self.cache_key] = (True, None)
             else:
-                resolved = self.resolve()
-                if any(resolved.is_relative_to(p) for p in self.tex_roots_resolved()):
-                    self._writable_dir_cache[self.cache_key] = (True, None)
-                else:
-                    self._writable_dir_cache[self.cache_key] = (
-                        False,
-                        'security settings do not permit access to this location'
-                    )
+                self._writable_dir_cache[self.cache_key] = (
+                    False,
+                    'security settings do not permit access to this location'
+                )
             return self._writable_dir_cache[self.cache_key]
 
     def writable_file(self) -> tuple[Literal[True], None] | tuple[Literal[False], str]:
@@ -658,7 +652,7 @@ class ResolvedRestrictedPath(BaseRestrictedPath):
                             f'security settings prevent writing files with extension "{ext}"'
                         )
                         return self._writable_file_cache[self.cache_key]
-            if self.can_write_dotfiles() or not any(p.name.startswith('.') for p in (self, resolved)):
+            if not any(p.name.startswith('.') for p in (self, resolved)) or self.can_write_dotfiles():
                 self._writable_file_cache[self.cache_key] = resolved.parent.writable_dir()
             else:
                 self._writable_file_cache[self.cache_key] = (
