@@ -76,7 +76,7 @@ class LatexConfig(object):
         pass
 
 
-    _permitted_subprocess_executables = set(['kpsewhich', 'initexmf'])
+    _permitted_subprocess_executables = set(['kpsewhich', 'initexmf', 'miktex-kpsewhich'])
     _permitted_subprocess_executables.update([f'{executable}.exe' for executable in _permitted_subprocess_executables])
 
     _tex_cwd_anypath: AnyPath = AnyPath.cwd()
@@ -178,6 +178,8 @@ class LatexConfig(object):
             which_kpsewhich = shutil.which('kpsewhich.exe', path=str(miktex_bin_path))
         else:
             which_kpsewhich = shutil.which('kpsewhich', path=str(miktex_bin_path))
+            if not which_kpsewhich:
+                which_kpsewhich = shutil.which('miktex-kpsewhich', path=str(miktex_bin_path))
         if not which_kpsewhich:
             raise LatexConfigError(
                 'Environment variable TEXSYSTEM="miktex", '

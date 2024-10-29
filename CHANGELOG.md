@@ -3,6 +3,9 @@
 
 ## v0.6.0 (dev)
 
+*  Added support for `miktex-kpsewhich` executable for MiKTeX compatibility
+   under macOS (gpoore/minted#401).
+
 *  Reorganized logic in `ResolvedRestrictedPath` to improve performance.
    Methods `can_read_anywhere()`, `can_read_dotfiles()`,
    `can_write_anywhere()`, and `can_write_dotfiles()` are no longer called
