@@ -1,7 +1,7 @@
 # Changelog — `latexrestricted` Python package
 
 
-## v0.6.0 (dev)
+## v0.6.0 (2024-10-29)
 
 *  Added support for `miktex-kpsewhich` executable for MiKTeX compatibility
    under macOS (gpoore/minted#401).
