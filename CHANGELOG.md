@@ -5,6 +5,9 @@
 
 *  `pyproject.toml`:  explicitly set `build-backend`.
 
+*  Restricted subprocesses now always support the `miktex-kpsewhich`
+   executable in addition to `kpsewhich`.
+
 
 
 ## v0.6.0 (2024-10-29)

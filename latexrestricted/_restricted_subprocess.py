@@ -22,6 +22,7 @@ from ._latex_config import latex_config
 
 _always_approved_executables = set([
     'kpsewhich',
+    'miktex-kpsewhich',
     'initexmf',
 ])
 

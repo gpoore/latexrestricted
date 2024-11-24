@@ -333,8 +333,8 @@ from latexrestricted import restricted_run
 restricted_run(args: list[str], allow_restricted_executables: bool = False)
 ```
 
-* It is *always* possible to run `kpsewhich` and `initexmf`.  These are
-  necessary to access TeX configuration values.
+* It is *always* possible to run `kpsewhich` (including `miktex-kpsewhich`)
+  and `initexmf`.  These are necessary to access TeX configuration values.
 
   Running other executables allowed by TeX configuration for restricted shell
   escape requires the optional argument `allow_restricted_executables=True`.
