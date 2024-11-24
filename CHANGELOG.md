@@ -1,6 +1,12 @@
 # Changelog — `latexrestricted` Python package
 
 
+## v0.6.1 (dev)
+
+*  `pyproject.toml`:  explicitly set `build-backend`.
+
+
+
 ## v0.6.0 (2024-10-29)
 
 *  Added support for `miktex-kpsewhich` executable for MiKTeX compatibility
