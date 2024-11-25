@@ -1,9 +1,15 @@
 # Changelog — `latexrestricted` Python package
 
 
-## v0.6.1 (dev)
+## v0.6.2 (2024-11-24)
 
-*  `pyproject.toml`:  explicitly set `build-backend`.
+*  Fixed version and CHANGELOG from v0.6.1.
+
+
+
+## v0.6.1 (2024-11-24)
+
+*  `pyproject.toml`:  explicitly set `build-backend` (#1).
 
 *  Restricted subprocesses now always support the `miktex-kpsewhich`
    executable in addition to `kpsewhich`.
